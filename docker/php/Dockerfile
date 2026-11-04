@@ -43,8 +43,8 @@ COPY docker/php/php.ini /usr/local/etc/php/conf.d/zz-portal.ini
 # --- Composer (copiado desde la imagen oficial) ---
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# --- Node.js 20 + npm (para assets del frontend) ---
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+# --- Node.js 22 (LTS) + npm (para assets del frontend) ---
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
 

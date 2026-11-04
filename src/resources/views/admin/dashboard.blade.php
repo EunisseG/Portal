@@ -22,7 +22,7 @@
 @endphp
 
 @section('content')
-    <h1 class="text-2xl font-semibold text-slate-900">Escritorio</h1>
+    <h1 class="text-2xl font-semibold text-slate-900">Escritorios</h1>
 
     {{-- Tarjetas KPI --}}
     <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

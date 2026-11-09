@@ -85,8 +85,9 @@ class ClientInvoicesTest extends TestCase
         $this->assertSame(2, $summary['invoices']['unpaid']);
     }
 
-    public function test_pay_online_button_hidden_in_manual_mode(): void
+    public function test_invoices_list_has_no_online_payment_button(): void
     {
+        // El pago en línea ya no vive en facturas, sino en órdenes de pago.
         $me = $this->clientUser();
         Invoice::factory()->create([
             'client_id' => $me->client->id,
@@ -94,7 +95,6 @@ class ClientInvoicesTest extends TestCase
             'status' => InvoiceStatus::Pending->value,
         ]);
 
-        // Modo manual (default): no debe aparecer "Pagar en línea".
         $this->actingAs($me)
             ->get('/client/facturas')
             ->assertOk()
@@ -102,23 +102,43 @@ class ClientInvoicesTest extends TestCase
             ->assertDontSee('Pagar en línea');
     }
 
-    public function test_pay_online_button_shows_in_automatic_mode(): void
+    public function test_payment_order_receipt_shows_pay_button_only_in_automatic_mode(): void
     {
+        $me = $this->clientUser();
+
+        $order = \App\Domain\Billing\Models\PaymentOrder::create([
+            'folio' => 'PO-TEST-REC',
+            'client_id' => $me->client->id,
+            'service_id' => null,
+            'invoice_id' => null,
+            'amount_cents' => 116000,
+            'subtotal_cents' => 100000,
+            'tax_cents' => 16000,
+            'tax_rate' => 16,
+            'concept' => 'Pedido de prueba',
+            'currency' => 'MXN',
+            'status' => \App\Domain\Billing\Enums\PaymentOrderStatus::Pending->value,
+            'gateway' => 'mercadopago',
+            'checkout_url' => 'https://sandbox.mercadopago.com/checkout/PO-TEST-REC',
+            'expires_at' => now()->addDays(5),
+        ]);
+
+        // Modo manual (default): no aparece el botón de pago.
+        $this->actingAs($me)
+            ->get('/client/ordenes-pago/'.$order->id.'/recibo')
+            ->assertOk()
+            ->assertSee('PO-TEST-REC')
+            ->assertDontSee('Realizar pago');
+
+        // Modo automático: aparece el botón de pago.
         \App\Domain\Notifications\Models\Setting::put(
             \App\Support\OperationMode::KEY_PAYMENTS,
             \App\Support\OperationMode::MODE_AUTOMATIC,
         );
 
-        $me = $this->clientUser();
-        Invoice::factory()->create([
-            'client_id' => $me->client->id,
-            'folio' => 'AUTO-001',
-            'status' => InvoiceStatus::Pending->value,
-        ]);
-
         $this->actingAs($me)
-            ->get('/client/facturas')
+            ->get('/client/ordenes-pago/'.$order->id.'/recibo')
             ->assertOk()
-            ->assertSee('Pagar en línea');
+            ->assertSee('Realizar pago');
     }
 }

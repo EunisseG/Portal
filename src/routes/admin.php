@@ -4,6 +4,7 @@ use App\Domain\Auth\Enums\RoleName;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\DataTransferController;
 use App\Livewire\Admin\Audit\AuditIndex;
+use App\Livewire\Admin\Billing\PaymentOrderIndex;
 use App\Livewire\Admin\Content\MaintenanceIndex;
 use App\Livewire\Admin\Security\FailedLoginIndex;
 use App\Livewire\Admin\Clients\ClientCreditPanel;
@@ -13,7 +14,6 @@ use App\Livewire\Admin\Clients\ClientPanel;
 use App\Livewire\Admin\Clients\ClientShow;
 use App\Livewire\Admin\Domains\DomainForm;
 use App\Livewire\Admin\Domains\DomainIndex;
-use App\Livewire\Admin\Billing\PaymentOrderIndex;
 use App\Livewire\Admin\Invoices\InvoiceForm;
 use App\Livewire\Admin\Invoices\InvoiceIndex;
 use App\Livewire\Admin\Kb\KbArticleForm;
@@ -125,7 +125,7 @@ Route::middleware(['auth', 'verified', 'not.blocked', 'role:'.$adminRoles])
         Route::get('/facturas/nueva', InvoiceForm::class)->name('invoices.create');
         Route::get('/facturas/{invoice}/editar', InvoiceForm::class)->name('invoices.edit');
 
-        // Órdenes de pago en línea (folios de cobro; solo lectura).
+        // Órdenes de pago (cobros) + comprobantes recibidos: página propia.
         Route::get('/ordenes-pago', PaymentOrderIndex::class)->name('payment-orders.index');
 
         // Gráficas / Reportes (concentrador de distribuciones e ingresos).

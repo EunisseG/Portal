@@ -4,8 +4,11 @@ namespace App\Integrations\Mail;
 
 use App\Integrations\Contracts\GatewayResult;
 use App\Integrations\Contracts\MailGateway;
+use App\Support\BrandedEmail;
+use App\Support\EmailTemplate;
 use Illuminate\Mail\Mailer;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\HtmlString;
 use Symfony\Component\Mailer\Transport\Dsn;
 use Symfony\Component\Mailer\Transport\TransportInterface;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransportFactory;
@@ -17,7 +20,11 @@ use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransportFactory;
  */
 class SmtpMailGateway implements MailGateway
 {
-    public function __construct(private readonly SmtpSettings $settings) {}
+    public function __construct(
+        private readonly SmtpSettings $settings,
+        private readonly EmailTemplate $template,
+        private readonly BrandedEmail $branded,
+    ) {}
 
     public function send(string $to, string $subject, string $body, array $options = []): GatewayResult
     {
@@ -27,12 +34,25 @@ class SmtpMailGateway implements MailGateway
             $from = $this->settings->fromAddress();
             $fromName = $this->settings->fromName();
 
-            $mailer->raw($body, function ($message) use ($to, $subject, $from, $fromName) {
+            $callback = function ($message) use ($to, $subject, $from, $fromName) {
                 $message->to($to)->subject($subject)->from($from, $fromName);
                 // Marca para que el listener global de MessageSent no vuelva a
                 // registrar este correo en email_logs: ya lo hace LoggingMailGateway.
                 $message->getHeaders()->addTextHeader('X-Wortev-Logged', '1');
-            });
+            };
+
+            if ($this->template->enabled()) {
+                // Correo con la marca del portal (HTML) y su versión en texto plano.
+                $rendered = $this->branded->render($subject, $body, $options);
+
+                $mailer->send(
+                    ['html' => new HtmlString($rendered['html']), 'text' => new HtmlString($rendered['text'])],
+                    [],
+                    $callback,
+                );
+            } else {
+                $mailer->raw($body, $callback);
+            }
 
             return GatewayResult::ok('Correo enviado por SMTP.', ['to' => $to]);
         } catch (\Throwable $e) {
@@ -51,7 +71,7 @@ class SmtpMailGateway implements MailGateway
         );
     }
 
-    private function buildMailer(): Mailer
+    protected function buildMailer(): Mailer
     {
         $transport = $this->buildTransport();
 

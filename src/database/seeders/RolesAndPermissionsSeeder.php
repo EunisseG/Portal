@@ -44,6 +44,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'client.invoices.view', 'client.proofs.upload',
         'client.tickets.view', 'client.tickets.create',
         'client.services.view', 'client.domains.view',
+        'client.orders.create',
     ];
 
     /**
@@ -58,6 +59,7 @@ class RolesAndPermissionsSeeder extends Seeder
         'client.tickets.create',
         'client.services.view',
         'client.domains.view',
+        'client.orders.create',
     ];
 
     public function run(): void

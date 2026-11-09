@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\RecoveryLinkController;
 use App\Http\Controllers\DashboardRedirectController;
 use App\Http\Controllers\InvoiceDownloadController;
 use App\Http\Controllers\PaymentProofDownloadController;
+use App\Http\Controllers\PaymentReceiptDownloadController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\TicketAttachmentController;
 use Illuminate\Support\Facades\Route;
@@ -37,6 +38,12 @@ Route::middleware(['auth', 'verified', 'not.blocked'])->group(function () {
     Route::get('/facturas/{invoice}/xml', [InvoiceDownloadController::class, 'xml'])->name('admin.invoices.download.xml');
     Route::get('/mis-facturas/{invoice}/pdf', [InvoiceDownloadController::class, 'pdf'])->name('client.invoices.download');
     Route::get('/mis-facturas/{invoice}/xml', [InvoiceDownloadController::class, 'xml'])->name('client.invoices.download.xml');
+
+    // Recibo de una orden de pago en PDF (estilo recibo). El controlador
+    // autoriza admin o cliente dueño; se registran ambos nombres para las
+    // vistas admin y cliente.
+    Route::get('/ordenes-pago/{paymentOrder}/recibo-pdf', PaymentReceiptDownloadController::class)->name('admin.payment-orders.receipt.pdf');
+    Route::get('/mis-ordenes-pago/{paymentOrder}/recibo-pdf', PaymentReceiptDownloadController::class)->name('client.payment-orders.receipt.pdf');
 
     // Descarga de adjuntos de tickets (protegida por policy: staff o cliente dueño).
     Route::get('/tickets/adjuntos/{attachment}', TicketAttachmentController::class)->name('tickets.attachment');

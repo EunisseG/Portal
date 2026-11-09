@@ -193,8 +193,7 @@ class ClientForm extends Component
 
     /**
      * Crea un servicio inicial para el cliente a partir de un producto del
-     * catálogo. Si el producto es recurrente, usa el precio e IVA del ciclo
-     * elegido; si es de pago único, usa su precio plano.
+     * catálogo, junto con su orden de pago (ver ProductOrderService).
      */
     private function createInitialService(Client $client, int $productId, string $cycleValue): void
     {
@@ -204,44 +203,17 @@ class ClientForm extends Component
             return;
         }
 
-        $cycle = \App\Domain\Services\Enums\BillingCycle::tryFrom($cycleValue)
-            ?? \App\Domain\Services\Enums\BillingCycle::Monthly;
-
-        $unitCents = (int) $product->price_cents;
-        $taxRate = 0.0;
-        $billingCycle = \App\Domain\Services\Enums\BillingCycle::Monthly;
-        $months = 1;
-
-        if ($product->isRecurring()) {
-            // Usa el ciclo elegido si existe; si no, el primero disponible.
-            $price = $product->prices->firstWhere('billing_cycle', $cycle)
-                ?? $product->prices->first();
-
-            if ($price) {
-                $unitCents = (int) $price->unit_price_cents;
-                $taxRate = (float) $price->tax_rate;
-                $billingCycle = $price->billing_cycle;
-                $months = $price->billing_cycle->months();
-            }
+        // Un fallo (p. ej. de la pasarela) no debe impedir dar de alta al cliente.
+        try {
+            app(\App\Domain\Services\Services\ProductOrderService::class)->place(
+                $client,
+                $product,
+                $cycleValue,
+                \App\Domain\Services\Enums\ServiceStatus::Active,
+            );
+        } catch (\Throwable $e) {
+            report($e);
         }
-
-        $taxCents = (int) round($unitCents * $taxRate / 100);
-        $totalCents = $unitCents + $taxCents;
-
-        \App\Domain\Services\Models\Service::create([
-            'client_id' => $client->id,
-            'type' => \App\Domain\Services\Enums\ServiceType::Other->value,
-            'name' => $product->name,
-            'status' => \App\Domain\Services\Enums\ServiceStatus::Active->value,
-            'billing_cycle' => $billingCycle->value,
-            'unit_price_cents' => $unitCents,
-            'tax_rate' => $taxRate,
-            'total_cents' => $totalCents,
-            'price_cents' => $totalCents,
-            'currency' => $product->currency,
-            'starts_at' => now()->toDateString(),
-            'expires_at' => now()->addMonths($months)->toDateString(),
-        ]);
     }
 
     public function render(): View

@@ -155,65 +155,66 @@ class OrderBillingFlowTest extends TestCase
         return $user;
     }
 
-    public function test_approving_proof_with_payment_registers_payment_for_admin(): void
+    /** Orden de pago con un comprobante pendiente para un cliente. */
+    private function orderWithProof(Client $client): PaymentProof
+    {
+        $service = Service::factory()->create([
+            'client_id' => $client->id,
+            'unit_price_cents' => 50000, 'subtotal_cents' => 50000,
+            'discount_cents' => 0, 'tax_cents' => 8000, 'tax_rate' => 16,
+            'total_cents' => 58000, 'currency' => 'MXN',
+        ]);
+        $order = app(\App\Domain\Billing\Services\PaymentOrderService::class)
+            ->createForService($service, new \App\Integrations\Providers\MercadoPago\FakeMercadoPagoProvider());
+
+        return PaymentProof::create([
+            'client_id' => $client->id,
+            'payment_order_id' => $order->id,
+            'file_path' => 'payment-proofs/'.$client->id.'/p.pdf',
+            'original_name' => 'p.pdf',
+            'amount_cents' => 58000,
+            'currency' => 'MXN',
+            'method' => 'transfer',
+            'paid_at' => now()->toDateString(),
+            'status' => PaymentProofStatus::Pending->value,
+        ]);
+    }
+
+    public function test_approving_order_proof_marks_order_paid_and_generates_invoice_for_admin(): void
     {
         $admin = $this->admin();
         $this->actingAs($admin);
 
-        $client = Client::factory()->create();
-        $invoice = Invoice::factory()->create(['client_id' => $client->id, 'total_cents' => 50000, 'amount_paid_cents' => 0, 'status' => InvoiceStatus::Pending->value]);
-        $proof = PaymentProof::create([
-            'client_id' => $client->id,
-            'invoice_id' => $invoice->id,
-            'file_path' => 'payment-proofs/'.$client->id.'/p.pdf',
-            'original_name' => 'p.pdf',
-            'amount_cents' => 50000,
-            'currency' => 'MXN',
-            'method' => 'transfer',
-            'paid_at' => now()->toDateString(),
-            'status' => PaymentProofStatus::Pending->value,
-        ]);
+        $proof = $this->orderWithProof(Client::factory()->create());
 
-        \Livewire\Livewire::test(\App\Livewire\Admin\Invoices\InvoiceIndex::class)
-            ->set('tab', 'proofs')
-            ->call('approveProof', $proof->id, true);
+        \Livewire\Livewire::test(\App\Livewire\Admin\Billing\PaymentOrderIndex::class)
+            ->call('approveProof', $proof->id);
 
-        $invoice->refresh();
-        $this->assertSame(PaymentProofStatus::Approved, $proof->fresh()->status);
-        $this->assertSame(50000, $invoice->amount_paid_cents);
-        $this->assertSame(InvoiceStatus::Paid, $invoice->status);
-        $this->assertSame(1, Payment::where('invoice_id', $invoice->id)->count());
-        $this->assertSame($proof->id, Payment::where('invoice_id', $invoice->id)->first()->payment_proof_id);
+        $proof->refresh();
+        $order = $proof->paymentOrder;
+        $this->assertSame(PaymentProofStatus::Approved, $proof->status);
+        $this->assertSame(\App\Domain\Billing\Enums\PaymentOrderStatus::Paid, $order->status);
+        // Se generó la factura del pedido y se registró el pago.
+        $this->assertNotNull($order->invoice_id);
+        $this->assertSame(InvoiceStatus::Paid, $order->invoice->status);
+        $this->assertSame(1, Payment::where('invoice_id', $order->invoice_id)->count());
+        $this->assertSame($proof->id, Payment::where('invoice_id', $order->invoice_id)->first()->payment_proof_id);
     }
 
-    public function test_staff_approves_proof_but_cannot_register_payment(): void
+    public function test_staff_approves_order_proof_but_cannot_mark_it_paid(): void
     {
         $staff = $this->staff();
         $this->actingAs($staff);
 
-        $client = Client::factory()->create();
-        $invoice = Invoice::factory()->create(['client_id' => $client->id, 'total_cents' => 50000, 'amount_paid_cents' => 0, 'status' => InvoiceStatus::Pending->value]);
-        $proof = PaymentProof::create([
-            'client_id' => $client->id,
-            'invoice_id' => $invoice->id,
-            'file_path' => 'payment-proofs/'.$client->id.'/p.pdf',
-            'original_name' => 'p.pdf',
-            'amount_cents' => 50000,
-            'currency' => 'MXN',
-            'method' => 'transfer',
-            'paid_at' => now()->toDateString(),
-            'status' => PaymentProofStatus::Pending->value,
-        ]);
+        $proof = $this->orderWithProof(Client::factory()->create());
 
-        \Livewire\Livewire::test(\App\Livewire\Admin\Invoices\InvoiceIndex::class)
-            ->set('tab', 'proofs')
-            ->call('approveProof', $proof->id, true);
+        \Livewire\Livewire::test(\App\Livewire\Admin\Billing\PaymentOrderIndex::class)
+            ->call('approveProof', $proof->id);
 
-        $invoice->refresh();
-        $this->assertSame(PaymentProofStatus::Approved, $proof->fresh()->status);
-        // Staff no tiene payments.record: se aprueba pero no se registra pago.
-        $this->assertSame(0, $invoice->amount_paid_cents);
-        $this->assertSame(0, Payment::where('invoice_id', $invoice->id)->count());
+        $proof->refresh();
+        $this->assertSame(PaymentProofStatus::Approved, $proof->status);
+        // Staff no tiene payments.record: se aprueba pero la orden sigue pendiente.
+        $this->assertSame(\App\Domain\Billing\Enums\PaymentOrderStatus::Pending, $proof->paymentOrder->status);
     }
 
     public function test_add_addon_from_catalog_recalculates_service_total(): void

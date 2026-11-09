@@ -134,6 +134,7 @@ class MemberManager extends Component
             'client.tickets.create' => 'Crear tickets',
             'client.services.view' => 'Ver servicios',
             'client.domains.view' => 'Ver dominios',
+            'client.orders.create' => 'Hacer pedidos',
         ];
 
         return view('livewire.client.team.member-manager', [

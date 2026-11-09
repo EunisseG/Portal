@@ -13,8 +13,10 @@ use App\Domain\Services\Models\Domain;
 use App\Domain\Services\Models\Plan;
 use App\Domain\Services\Models\Server;
 use App\Domain\Services\Models\Service;
+use App\Domain\Billing\Services\PaymentOrderService;
 use App\Domain\Billing\Services\PricingService;
 use App\Domain\Services\Services\ServiceService;
+use App\Integrations\Contracts\PaymentGateway;
 use App\Support\Money;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Carbon;
@@ -61,6 +63,15 @@ class ServiceForm extends Component
     {
         if ($service && $service->exists) {
             Gate::authorize('update', Service::class);
+
+            // Un pedido ya pagado no se edita (ni se regenera su orden).
+            if ($service->isLockedByPayment()) {
+                session()->flash('error', 'Este pedido ya está pagado y no se puede editar.');
+                $this->redirect(route('admin.services.show', $service));
+
+                return;
+            }
+
             $this->service = $service;
             $this->client_id = (string) $service->client_id;
             $this->sales_rep_id = $service->sales_rep_id;
@@ -111,13 +122,6 @@ class ServiceForm extends Component
     }
 
     /**
-     * Extensiones que registramos gratis (salvo que sean premium).
-     *
-     * @var list<string>
-     */
-    private const FREE_TLDS = ['.com', '.com.mx'];
-
-    /**
      * ¿El dominio nuevo se cobra? Solo cuando el modo es 'new', el origen es
      * 'purchase', y (es premium O la extensión no está en la lista gratuita).
      */
@@ -148,17 +152,10 @@ class ServiceForm extends Component
         return $this->domainIsChargeable() ? (float) ($this->domainPrice ?: 0) : 0.0;
     }
 
+    /** Regla compartida con el pedido del cliente (ProductOrderService). */
     private function hasFreeTld(string $name): bool
     {
-        $name = strtolower(trim($name));
-
-        foreach (self::FREE_TLDS as $tld) {
-            if (str_ends_with($name, $tld)) {
-                return true;
-            }
-        }
-
-        return false;
+        return \App\Domain\Services\Services\ProductOrderService::isFreeTld($name);
     }
 
     /** ¿El tipo actual usa servidor? (solo hosting) */
@@ -381,6 +378,13 @@ class ServiceForm extends Component
 
     public function save(ServiceService $services, PricingService $pricing): mixed
     {
+        // Defensa en servidor: un pedido pagado no admite cambios.
+        if ($this->isEditing() && $this->service->isLockedByPayment()) {
+            session()->flash('error', 'Este pedido ya está pagado y no se puede editar.');
+
+            return $this->redirect(route('admin.services.show', $this->service));
+        }
+
         $data = $this->validate();
         $this->validateDomain();
 
@@ -412,17 +416,35 @@ class ServiceForm extends Component
             $this->linkDomain($this->service, $data);
             $this->syncDomainCharge($this->service, $data);
             // Recalcula el desglose respetando complementos y promoción actuales.
-            $pricing->recalculate($this->service->refresh()->load('addons'));
+            $service = $this->service->refresh()->load('addons');
+            $pricing->recalculate($service);
+            // Regenera la orden de pago pendiente con el nuevo desglose.
+            $this->generatePaymentOrder($service->refresh());
             session()->flash('status', 'Servicio actualizado.');
         } else {
             $service = $services->create($payload);
             $this->linkDomain($service, $data);
             $this->syncDomainCharge($service, $data);
             $pricing->recalculate($service->refresh()->load('addons'));
+            // Al crear el pedido se genera su orden de pago.
+            $this->generatePaymentOrder($service->refresh());
             session()->flash('status', 'Servicio creado.');
         }
 
         return $this->redirect(route('admin.services.index'), navigate: true);
+    }
+
+    /**
+     * Genera (o regenera) la orden de pago del pedido. Un fallo de la pasarela
+     * no debe impedir guardar el pedido: se avisa pero no se interrumpe.
+     */
+    private function generatePaymentOrder(Service $service): void
+    {
+        try {
+            app(PaymentOrderService::class)->createForService($service, app(PaymentGateway::class));
+        } catch (\Throwable $e) {
+            session()->flash('error', 'El pedido se guardó, pero no se pudo generar la orden de pago: '.$e->getMessage());
+        }
     }
 
     /**

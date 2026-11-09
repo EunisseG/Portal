@@ -9,8 +9,10 @@ use App\Livewire\Client\Account\ProfileData;
 use App\Livewire\Client\Account\SecuritySettings;
 use App\Livewire\Client\Domains\DomainList;
 use App\Livewire\Client\Invoices\InvoiceList;
+use App\Livewire\Client\Invoices\PaymentOrderReceipt;
 use App\Livewire\Client\Kb\KbList;
 use App\Livewire\Client\Maintenance\MaintenanceList;
+use App\Livewire\Client\Orders\OrderCreate;
 use App\Livewire\Client\Kb\KbShow;
 use App\Livewire\Client\News\NewsList;
 use App\Livewire\Client\News\NewsShow;
@@ -31,10 +33,18 @@ Route::middleware(['auth', 'verified', 'not.blocked', 'role:'.RoleName::Client->
     ->group(function () {
         Route::get('/', DashboardController::class)->name('dashboard');
 
+        // Pedido del cliente: elige un producto y se genera su orden de pago.
+        Route::get('/pedidos/nuevo', OrderCreate::class)->name('orders.create');
+
         Route::get('/servicios', ServiceList::class)->name('services.index');
         Route::get('/servicios/{service}', ServiceShow::class)->name('services.show');
         Route::get('/dominios', DomainList::class)->name('domains.index');
+        // Pagos: facturas (solo las firmadas por el SAT) y, aparte, las órdenes
+        // de pago con sus comprobantes. Ambas usan el mismo componente.
         Route::get('/facturas', InvoiceList::class)->name('invoices.index');
+        Route::get('/comprobantes', InvoiceList::class)->defaults('section', 'proofs')->name('proofs.index');
+        Route::redirect('/ordenes-pago', '/client/comprobantes')->name('payment-orders.index');
+        Route::get('/ordenes-pago/{order}/recibo', PaymentOrderReceipt::class)->name('payment-orders.receipt');
 
         Route::get('/tickets', ClientTicketIndex::class)->name('tickets.index');
         Route::get('/tickets/nuevo', TicketCreate::class)->name('tickets.create');

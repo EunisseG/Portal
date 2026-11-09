@@ -1,20 +1,15 @@
 <div>
-    @include('partials.client-page-header', [
-        'title' => 'Mis facturas',
-        'subtitle' => 'Consulta tus facturas y envía tus comprobantes de pago.',
-    ])
-
-    {{-- Pestañas --}}
-    <div class="mt-4 flex gap-1 border-b border-slate-200">
-        <button type="button" wire:click="setTab('invoices')"
-                class="border-b-2 px-4 py-2 text-sm font-medium {{ $tab === 'invoices' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700' }}">
-            Facturas
-        </button>
-        <button type="button" wire:click="setTab('proofs')"
-                class="border-b-2 px-4 py-2 text-sm font-medium {{ $tab === 'proofs' ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500 hover:text-slate-700' }}">
-            Comprobantes de pago
-        </button>
-    </div>
+    @if ($tab === 'proofs')
+        @include('partials.client-page-header', [
+            'title' => 'Comprobantes de pago',
+            'subtitle' => 'Tus órdenes de pago y los comprobantes que has enviado.',
+        ])
+    @else
+        @include('partials.client-page-header', [
+            'title' => 'Mis facturas',
+            'subtitle' => 'Consulta y descarga tus facturas.',
+        ])
+    @endif
 
     @if (session('status'))
         <div class="mt-4 rounded-md bg-green-50 px-4 py-3 text-sm text-green-700 ring-1 ring-green-600/10">{{ session('status') }}</div>
@@ -61,19 +56,6 @@
                                 </td>
                                 <td class="px-5 py-3.5">
                                     <div class="flex items-center justify-end gap-2">
-                                        @php
-                                            $payable = in_array($invoice->status, [
-                                                \App\Domain\Billing\Enums\InvoiceStatus::Pending,
-                                                \App\Domain\Billing\Enums\InvoiceStatus::Overdue,
-                                            ], true);
-                                        @endphp
-                                        @if ($paymentsAutomatic && $payable)
-                                            <button type="button" wire:click="payOnline({{ $invoice->id }})"
-                                                    class="inline-flex items-center gap-1 rounded-md bg-green-600 px-2.5 py-1 text-xs font-medium text-white transition hover:bg-green-700">
-                                                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3M3.75 5.25h16.5A1.5 1.5 0 0 1 21.75 6.75v10.5a1.5 1.5 0 0 1-1.5 1.5H3.75a1.5 1.5 0 0 1-1.5-1.5V6.75a1.5 1.5 0 0 1 1.5-1.5Z"/></svg>
-                                                Pagar en línea
-                                            </button>
-                                        @endif
                                         <a href="{{ route('client.invoices.download', $invoice) }}"
                                            class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100">
                                             <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>
@@ -108,8 +90,65 @@
 
     {{-- ===================== Pestaña: Comprobantes ===================== --}}
     @if ($tab === 'proofs')
+        {{-- Órdenes de pago: tus cobros. La factura (CFDI) llega después del pago. --}}
         <div class="mt-5 flex items-center justify-between">
-            <p class="text-sm text-slate-500">Envía tu comprobante de pago; lo revisaremos y te emitiremos tu factura.</p>
+            <div>
+                <h2 class="font-semibold text-slate-900">Órdenes de pago</h2>
+                <p class="text-sm text-slate-500">Abre el recibo de una orden para pagarla o subir tu comprobante.</p>
+            </div>
+            @if (auth()->user()->canClient('client.orders.create'))
+                <a href="{{ route('client.orders.create') }}"
+                   class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
+                    Hacer un pedido
+                </a>
+            @endif
+        </div>
+
+        <div class="mt-3 overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-900/5">
+            <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-100 text-sm">
+                    <thead class="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                        <tr>
+                            <th class="px-5 py-3">Folio</th>
+                            <th class="px-5 py-3">Concepto</th>
+                            <th class="px-5 py-3 text-right">Total</th>
+                            <th class="px-5 py-3">Creada</th>
+                            <th class="px-5 py-3">Estado</th>
+                            <th class="px-5 py-3 text-right">Recibo</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-100">
+                        @forelse ($orders as $order)
+                            <tr wire:key="po-{{ $order->id }}" class="transition hover:bg-slate-50/70">
+                                <td class="px-5 py-3.5 font-medium text-slate-900">{{ $order->folio }}</td>
+                                <td class="px-5 py-3.5 text-slate-600">{{ $order->concept ?: '—' }}</td>
+                                <td class="px-5 py-3.5 text-right font-medium text-slate-800">{{ $order->amount()->format() }}</td>
+                                <td class="px-5 py-3.5 text-slate-600">{{ $order->created_at?->translatedFormat('d M Y') }}</td>
+                                <td class="px-5 py-3.5">
+                                    <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ $order->status?->badgeClasses() }}">{{ $order->status?->label() }}</span>
+                                </td>
+                                <td class="px-5 py-3.5 text-right">
+                                    <a href="{{ route('client.payment-orders.receipt', $order) }}"
+                                       class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100">
+                                        Ver recibo
+                                    </a>
+                                </td>
+                            </tr>
+                        @empty
+                            <tr>
+                                <td colspan="6" class="px-5 py-8 text-center text-sm text-slate-500">Aún no tienes órdenes de pago.</td>
+                            </tr>
+                        @endforelse
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="mt-3">{{ $orders->links() }}</div>
+
+        {{-- Comprobantes enviados --}}
+        <div class="mt-8 flex items-center justify-between">
+            <p class="text-sm text-slate-500">Comprobantes de pago enviados. Los revisamos y marcamos tu orden como pagada.</p>
             @if (auth()->user()->canClient('client.proofs.upload'))
                 <button type="button" wire:click="$toggle('showProofForm')"
                         class="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-700">
@@ -197,7 +236,7 @@
                                 <td class="px-5 py-3.5 text-slate-600">{{ $proof->created_at?->translatedFormat('d M Y') }}</td>
                                 <td class="px-5 py-3.5 text-right font-medium text-slate-800">{{ $proof->amount()->format() }}</td>
                                 <td class="px-5 py-3.5 text-slate-600">{{ $proof->method?->label() ?: '—' }}</td>
-                                <td class="px-5 py-3.5 text-slate-600">{{ $proof->invoice?->folio ?: '—' }}</td>
+                                <td class="px-5 py-3.5 text-slate-600">{{ $proof->paymentOrder?->folio ?: ($proof->invoice?->folio ?: '—') }}</td>
                                 <td class="px-5 py-3.5">
                                     <span class="rounded-full px-2.5 py-0.5 text-xs font-medium {{ $proof->status?->badgeClasses() }}">
                                         {{ $proof->status?->label() }}

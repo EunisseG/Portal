@@ -5,10 +5,9 @@ namespace App\Livewire\Client\Invoices;
 use App\Domain\Billing\Enums\InvoiceStatus;
 use App\Domain\Billing\Enums\PaymentMethod;
 use App\Domain\Billing\Models\Invoice;
+use App\Domain\Billing\Models\PaymentOrder;
 use App\Domain\Billing\Models\PaymentProof;
-use App\Integrations\Contracts\PaymentGateway;
 use App\Support\Money;
-use App\Support\OperationMode;
 use Illuminate\Contracts\View\View;
 use Illuminate\Validation\Rule;
 use Livewire\Attributes\Url;
@@ -21,8 +20,7 @@ class InvoiceList extends Component
     use WithFileUploads;
     use WithPagination;
 
-    /** Pestaña activa: 'invoices' o 'proofs'. */
-    #[Url(as: 'tab')]
+    /** Sección activa: 'invoices' (facturas) o 'proofs' (órdenes y comprobantes). */
     public string $tab = 'invoices';
 
     #[Url(as: 'pending')]
@@ -37,19 +35,21 @@ class InvoiceList extends Component
     public string $proofReference = '';
     public string $proofInvoiceId = '';
 
-    public function mount(): void
+    /**
+     * @param  string|null  $section  'proofs' cuando se entra por «Comprobantes de
+     *                                pago»; sin valor se muestran las facturas.
+     */
+    public function mount(?string $section = null): void
     {
         abort_unless(auth()->user()->canClient('client.invoices.view'), 403);
+
+        if ($section !== null) {
+            $this->tab = $section === 'proofs' ? 'proofs' : 'invoices';
+        }
     }
 
     public function updatingOnlyPending(): void
     {
-        $this->resetPage();
-    }
-
-    public function setTab(string $tab): void
-    {
-        $this->tab = $tab === 'proofs' ? 'proofs' : 'invoices';
         $this->resetPage();
     }
 
@@ -94,71 +94,27 @@ class InvoiceList extends Component
         session()->flash('status', 'Comprobante enviado. Lo revisaremos y te emitiremos tu factura.');
     }
 
-    /**
-     * Inicia el pago en línea de una factura. Solo disponible cuando el modo de
-     * pagos es automático y hay una pasarela configurada. Preparado para
-     * conectar la pasarela (createCharge); por ahora deja listo el punto de
-     * enganche y avisa si falta configuración.
-     */
-    public function payOnline(int $invoiceId, OperationMode $mode, PaymentGateway $gateway): void
-    {
-        $client = auth()->user()->clientAccount();
-        abort_unless($client !== null, 403);
-
-        // El pago en línea solo opera en modo automático.
-        if (! $mode->paymentsAutomatic()) {
-            session()->flash('error', 'El pago en línea no está habilitado. Sube tu comprobante de pago.');
-
-            return;
-        }
-
-        $invoice = Invoice::where('client_id', $client->id)->findOrFail($invoiceId);
-
-        // No tiene sentido cobrar una factura ya pagada o sin saldo.
-        if ($invoice->balanceCents() <= 0) {
-            session()->flash('error', 'Esta factura no tiene saldo pendiente.');
-
-            return;
-        }
-
-        // Requiere una pasarela realmente configurada (no el fake).
-        if (! method_exists($gateway, 'isConfigured') || ! $gateway->isConfigured()) {
-            session()->flash('error', 'Aún no hay una pasarela de pago configurada. Inténtalo más tarde o sube tu comprobante.');
-
-            return;
-        }
-
-        // Genera una orden de pago (folio de cobro) y redirige al checkout de
-        // la pasarela. La confirmación la hace el webhook.
-        try {
-            $order = app(\App\Domain\Billing\Services\PaymentOrderService::class)->create($invoice, $gateway);
-        } catch (\Throwable $e) {
-            session()->flash('error', 'No se pudo iniciar el pago en línea: '.$e->getMessage());
-
-            return;
-        }
-
-        if ($order->checkout_url) {
-            $this->redirect($order->checkout_url);
-
-            return;
-        }
-
-        session()->flash('error', 'No se pudo iniciar el pago en línea.');
-    }
-
-    public function render(OperationMode $mode): View
+    public function render(): View
     {
         $client = auth()->user()->clientAccount();
 
         $invoices = null;
         $proofs = null;
+        $orders = null;
 
         if ($this->tab === 'proofs') {
+            // Órdenes de pago del cliente (viven en esta pestaña, no en Facturas).
+            $orders = $client
+                ? PaymentOrder::query()
+                    ->where('client_id', $client->id)
+                    ->orderByDesc('id')
+                    ->paginate(10, ['*'], 'ordenes')
+                : PaymentOrder::query()->whereRaw('1 = 0')->paginate(10, ['*'], 'ordenes');
+
             $proofs = $client
                 ? PaymentProof::query()
                     ->where('client_id', $client->id)
-                    ->with('invoice')
+                    ->with(['invoice', 'paymentOrder'])
                     ->orderByDesc('id')
                     ->paginate(10)
                 : PaymentProof::query()->whereRaw('1 = 0')->paginate(10);
@@ -184,9 +140,9 @@ class InvoiceList extends Component
         return view('livewire.client.invoices.invoice-list', [
             'invoices' => $invoices,
             'proofs' => $proofs,
+            'orders' => $orders,
             'clientInvoices' => $clientInvoices,
             'methodOptions' => PaymentMethod::options(),
-            'paymentsAutomatic' => $mode->paymentsAutomatic(),
         ])->layout('layouts.app', ['area' => 'client']);
     }
 }

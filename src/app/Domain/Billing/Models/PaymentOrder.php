@@ -7,6 +7,7 @@ use App\Domain\Clients\Models\Client;
 use App\Support\Money;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Orden de pago en línea (folio de cobro). Representa un intento de cobro por
@@ -21,8 +22,14 @@ class PaymentOrder extends Model
     protected $fillable = [
         'folio',
         'client_id',
+        'service_id',
         'invoice_id',
         'amount_cents',
+        'subtotal_cents',
+        'discount_cents',
+        'tax_cents',
+        'tax_rate',
+        'concept',
         'currency',
         'status',
         'gateway',
@@ -40,6 +47,10 @@ class PaymentOrder extends Model
     {
         return [
             'amount_cents' => 'integer',
+            'subtotal_cents' => 'integer',
+            'discount_cents' => 'integer',
+            'tax_cents' => 'integer',
+            'tax_rate' => 'decimal:2',
             'status' => PaymentOrderStatus::class,
             'expires_at' => 'datetime',
             'paid_at' => 'datetime',
@@ -51,14 +62,50 @@ class PaymentOrder extends Model
         return $this->belongsTo(Client::class);
     }
 
+    public function service(): BelongsTo
+    {
+        return $this->belongsTo(\App\Domain\Services\Models\Service::class);
+    }
+
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
     }
 
+    public function items(): HasMany
+    {
+        return $this->hasMany(PaymentOrderItem::class);
+    }
+
+    /** Comprobantes de pago que el cliente subió para esta orden. */
+    public function proofs(): HasMany
+    {
+        return $this->hasMany(PaymentProof::class);
+    }
+
     public function amount(): Money
     {
         return new Money((int) ($this->amount_cents ?? 0), $this->currency ?? Money::DEFAULT_CURRENCY);
+    }
+
+    public function subtotal(): Money
+    {
+        return new Money((int) ($this->subtotal_cents ?? 0), $this->currency ?? Money::DEFAULT_CURRENCY);
+    }
+
+    public function discount(): Money
+    {
+        return new Money((int) ($this->discount_cents ?? 0), $this->currency ?? Money::DEFAULT_CURRENCY);
+    }
+
+    public function tax(): Money
+    {
+        return new Money((int) ($this->tax_cents ?? 0), $this->currency ?? Money::DEFAULT_CURRENCY);
+    }
+
+    public function hasDiscount(): bool
+    {
+        return (int) ($this->discount_cents ?? 0) > 0;
     }
 
     public function isPending(): bool

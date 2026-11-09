@@ -49,6 +49,9 @@ class InvoiceService
 
             $this->audit->log(AuditAction::InvoiceCreated, $invoice, null, $this->snapshot($invoice));
 
+            // Avisa al cliente que su factura ya está disponible (correo + WhatsApp).
+            \App\Domain\Notifications\Jobs\SendInvoiceAvailableNotification::dispatch($invoice->id)->afterCommit();
+
             return $invoice;
         });
     }

@@ -22,6 +22,7 @@ class PaymentProof extends Model
     protected $fillable = [
         'client_id',
         'invoice_id',
+        'payment_order_id',
         'file_path',
         'original_name',
         'amount_cents',
@@ -57,6 +58,11 @@ class PaymentProof extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function paymentOrder(): BelongsTo
+    {
+        return $this->belongsTo(PaymentOrder::class);
     }
 
     public function reviewer(): BelongsTo

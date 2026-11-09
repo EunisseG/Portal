@@ -33,7 +33,7 @@
             ],
         ],
         [
-            'label' => 'Facturas',
+            'label' => 'Pagos',
             'pattern' => 'admin/facturas*|admin/ordenes-pago*|admin/monedas*',
             'items' => [
                 ['route' => 'admin.invoices.index', 'label' => 'Facturas', 'pattern' => 'admin/facturas*'],
@@ -116,7 +116,16 @@
     $clientNav = [
         ['route' => 'client.dashboard', 'label' => 'Inicio', 'pattern' => 'client'],
         ['route' => 'client.services.index', 'label' => 'Servicios', 'pattern' => 'client/servicios*|client/dominios*'],
-        ['route' => 'client.invoices.index', 'label' => 'Facturas', 'pattern' => 'client/facturas*'],
+        [
+            // Facturas (CFDI firmadas por el SAT) y, aparte, las órdenes de
+            // pago con sus comprobantes.
+            'label' => 'Pagos',
+            'pattern' => 'client/facturas*|client/comprobantes*|client/ordenes-pago*',
+            'items' => [
+                ['route' => 'client.invoices.index', 'label' => 'Facturas', 'pattern' => 'client/facturas*'],
+                ['route' => 'client.proofs.index', 'label' => 'Comprobantes de pago', 'pattern' => 'client/comprobantes*|client/ordenes-pago*'],
+            ],
+        ],
         ['route' => 'client.tickets.index', 'label' => 'Tickets', 'pattern' => 'client/tickets*'],
         ['route' => 'client.news.index', 'label' => 'Noticias', 'pattern' => 'client/noticias*'],
         ['route' => 'client.maintenances.index', 'label' => 'Mantenimientos', 'pattern' => 'client/mantenimientos*'],
@@ -220,10 +229,30 @@
                     @else
                         @foreach ($clientNav as $item)
                             @php $active = request()->is(explode('|', $item['pattern'])); @endphp
-                            <a href="{{ route($item['route']) }}" wire:navigate
-                               class="flex items-center px-3 py-2.5 text-sm font-medium {{ $active ? 'bg-white/15 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white' }}">
-                                {{ $item['label'] }}
-                            </a>
+                            @if (empty($item['items']))
+                                <a href="{{ route($item['route']) }}" wire:navigate
+                                   class="flex items-center px-3 py-2.5 text-sm font-medium {{ $active ? 'bg-white/15 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white' }}">
+                                    {{ $item['label'] }}
+                                </a>
+                            @else
+                                {{-- Grupo con submenú desplegable (hover) --}}
+                                <div class="group relative">
+                                    <button type="button"
+                                            class="flex items-center gap-1 px-3 py-2.5 text-sm font-medium {{ $active ? 'bg-white/15 text-white' : 'text-white/80 hover:bg-white/10 hover:text-white' }}">
+                                        {{ $item['label'] }}
+                                        <svg class="h-3.5 w-3.5 opacity-70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/></svg>
+                                    </button>
+                                    <div class="invisible absolute left-0 top-full z-20 min-w-56 rounded-b-lg bg-white py-1 text-slate-700 opacity-0 shadow-lg ring-1 ring-slate-900/5 transition group-hover:visible group-hover:opacity-100">
+                                        @foreach ($item['items'] as $sub)
+                                            @php $subActive = request()->is(explode('|', $sub['pattern'])); @endphp
+                                            <a href="{{ route($sub['route']) }}" wire:navigate
+                                               class="block px-4 py-2 text-sm {{ $subActive ? 'bg-indigo-50 font-medium text-indigo-700' : 'hover:bg-slate-50' }}">
+                                                {{ $sub['label'] }}
+                                            </a>
+                                        @endforeach
+                                    </div>
+                                </div>
+                            @endif
                         @endforeach
                     @endif
                 </div>

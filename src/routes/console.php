@@ -17,6 +17,10 @@ Schedule::command('addons:expire')->dailyAt('02:00');
 // Expira órdenes de pago en línea no pagadas (plazo de 5 días).
 Schedule::command('payment-orders:expire')->dailyAt('03:00');
 
+// Genera órdenes de pago de renovación para pedidos próximos a vencer. Corre
+// después de la expiración para reemplazar las órdenes que caducaron.
+Schedule::command('payment-orders:generate-renewals')->dailyAt('03:30')->withoutOverlapping();
+
 // Revisa incumplimientos de SLA en tickets activos y avisa al equipo. Corre
 // seguido para detectar vencimientos poco después de que ocurran.
 Schedule::command('sla:check')->everyFifteenMinutes()->withoutOverlapping();

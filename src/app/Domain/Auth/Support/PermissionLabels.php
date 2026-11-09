@@ -98,6 +98,7 @@ final class PermissionLabels
         'client.tickets.create' => 'Portal: crear tickets',
         'client.services.view' => 'Portal: ver servicios',
         'client.domains.view' => 'Portal: ver dominios',
+        'client.orders.create' => 'Portal: hacer pedidos',
     ];
 
     public static function forPermission(string $permission): string

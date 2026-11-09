@@ -113,6 +113,25 @@ class Service extends Model
         return $this->hasMany(\App\Domain\Billing\Models\Invoice::class);
     }
 
+    public function paymentOrders(): HasMany
+    {
+        return $this->hasMany(\App\Domain\Billing\Models\PaymentOrder::class);
+    }
+
+    /**
+     * ¿El pedido está bloqueado por estar pagado? Lo está cuando su orden de
+     * pago más reciente ya fue pagada: en ese caso no se edita ni se regenera
+     * otra orden. Al generarse la orden de la siguiente renovación (pendiente),
+     * la más reciente deja de estar pagada y el pedido vuelve a ser editable.
+     */
+    public function isLockedByPayment(): bool
+    {
+        $latest = $this->paymentOrders()->latest('id')->first();
+
+        return $latest !== null
+            && $latest->status === \App\Domain\Billing\Enums\PaymentOrderStatus::Paid;
+    }
+
     public function domains(): HasMany
     {
         return $this->hasMany(Domain::class);

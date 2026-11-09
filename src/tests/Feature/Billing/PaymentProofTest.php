@@ -7,7 +7,7 @@ use App\Domain\Billing\Enums\PaymentProofStatus;
 use App\Domain\Billing\Models\Invoice;
 use App\Domain\Billing\Models\PaymentProof;
 use App\Domain\Clients\Models\Client;
-use App\Livewire\Admin\Invoices\InvoiceIndex;
+use App\Livewire\Admin\Billing\PaymentOrderIndex;
 use App\Livewire\Client\Invoices\InvoiceList;
 use App\Models\User;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -145,7 +145,7 @@ class PaymentProofTest extends TestCase
         ]);
 
         $this->actingAs($me)
-            ->get('/client/facturas?tab=proofs')
+            ->get('/client/comprobantes')
             ->assertOk()
             ->assertSee('MIA-PROOF-01')
             ->assertDontSee('AJENA-PROOF-99');
@@ -158,8 +158,7 @@ class PaymentProofTest extends TestCase
         $proof = $this->makeProof($client);
 
         Livewire::actingAs($admin)
-            ->test(InvoiceIndex::class)
-            ->set('tab', 'proofs')
+            ->test(PaymentOrderIndex::class)
             ->call('approveProof', $proof->id)
             ->assertHasNoErrors();
 
@@ -176,8 +175,7 @@ class PaymentProofTest extends TestCase
         $proof = $this->makeProof($client);
 
         Livewire::actingAs($admin)
-            ->test(InvoiceIndex::class)
-            ->set('tab', 'proofs')
+            ->test(PaymentOrderIndex::class)
             ->call('startReject', $proof->id)
             ->set('rejectNote', 'El monto no coincide con la factura.')
             ->call('rejectProof')
@@ -196,8 +194,7 @@ class PaymentProofTest extends TestCase
         $proof = $this->makeProof($client);
 
         Livewire::actingAs($admin)
-            ->test(InvoiceIndex::class)
-            ->set('tab', 'proofs')
+            ->test(PaymentOrderIndex::class)
             ->call('startReject', $proof->id)
             ->set('rejectNote', '')
             ->call('rejectProof')
@@ -213,8 +210,7 @@ class PaymentProofTest extends TestCase
         $proof = $this->makeProof($client);
 
         Livewire::actingAs($staff)
-            ->test(InvoiceIndex::class)
-            ->set('tab', 'proofs')
+            ->test(PaymentOrderIndex::class)
             ->call('approveProof', $proof->id)
             ->assertHasNoErrors();
 

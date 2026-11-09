@@ -202,7 +202,11 @@
                                 <div class="flex items-center justify-end gap-3">
                                     <a href="{{ route('admin.services.show', $service) }}" class="text-slate-600 hover:underline">Ver</a>
                                     @can('update', App\Domain\Services\Models\Service::class)
-                                        <a href="{{ route('admin.services.edit', $service) }}" class="text-slate-600 hover:text-slate-900 hover:underline">Editar</a>
+                                        @if ($service->isLockedByPayment())
+                                            <span class="text-green-700" title="El pedido ya está pagado y no se puede editar.">Pagado</span>
+                                        @else
+                                            <a href="{{ route('admin.services.edit', $service) }}" class="text-slate-600 hover:text-slate-900 hover:underline">Editar</a>
+                                        @endif
                                     @endcan
                                 </div>
                             </td>

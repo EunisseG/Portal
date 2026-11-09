@@ -2,10 +2,17 @@
     <div class="flex items-center justify-between">
         <h1 class="text-2xl font-semibold text-slate-900">{{ $service->name }}</h1>
         @can('update', App\Domain\Services\Models\Service::class)
-            <a href="{{ route('admin.services.edit', $service) }}"
-               class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
-                Editar
-            </a>
+            @if ($service->isLockedByPayment())
+                <span class="rounded-md bg-green-50 px-4 py-2 text-sm font-medium text-green-700 ring-1 ring-green-600/10"
+                      title="El pedido ya está pagado y no se puede editar.">
+                    Pagado
+                </span>
+            @else
+                <a href="{{ route('admin.services.edit', $service) }}"
+                   class="rounded-md bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800">
+                    Editar
+                </a>
+            @endif
         @endcan
     </div>
 

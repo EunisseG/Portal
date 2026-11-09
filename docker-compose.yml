@@ -45,14 +45,16 @@ services:
       - portal
 
   # -------------------------------------------------------------------
-  # scheduler: ejecuta el planificador de Laravel cada minuto (recordatorios
-  # de vencimiento, tareas programadas). Reusa la imagen de la app.
+  # scheduler: ejecuta el planificador de Laravel (recordatorios de
+  # vencimiento, órdenes de renovación, tareas programadas). Reusa la imagen
+  # de la app. schedule:work queda corriendo y se sincroniza al inicio de cada
+  # minuto, así no se pierde ninguna tarea programada a una hora exacta.
   # -------------------------------------------------------------------
   scheduler:
     image: portal-wortev/app
     container_name: portal-wortev-scheduler
     working_dir: /var/www/html
-    command: sh -c "while true; do php artisan schedule:run --verbose --no-interaction; sleep 60; done"
+    command: php artisan schedule:work --no-interaction
     restart: unless-stopped
     volumes:
       - ./src:/var/www/html

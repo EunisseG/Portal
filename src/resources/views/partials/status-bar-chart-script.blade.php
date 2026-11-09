@@ -60,7 +60,20 @@
 
         document.addEventListener('DOMContentLoaded', renderStatusCharts);
         document.addEventListener('livewire:navigated', renderStatusCharts);
-        // Al cambiar de pestaña (Livewire re-renderiza), reintentar.
-        document.addEventListener('livewire:update', renderStatusCharts);
+
+        // Al cambiar de pestaña Livewire re-renderiza sin recargar: tras cada
+        // respuesta se dibujan las gráficas nuevas (las ya dibujadas se omiten).
+        function hookLivewire() {
+            if (window.__statusChartsHooked || ! window.Livewire || ! window.Livewire.hook) {
+                return;
+            }
+            window.__statusChartsHooked = true;
+            window.Livewire.hook('commit', ({ succeed }) => {
+                succeed(() => setTimeout(renderStatusCharts, 50));
+            });
+        }
+        hookLivewire();
+        document.addEventListener('livewire:init', hookLivewire);
+        document.addEventListener('DOMContentLoaded', hookLivewire);
     })();
 </script>

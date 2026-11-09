@@ -1,6 +1,6 @@
 <div class="mx-auto max-w-2xl">
     <h1 class="text-2xl font-semibold text-slate-900">Apariencia</h1>
-    <p class="mt-1 text-slate-600">Personaliza el nombre, el logo y el favicon del portal.</p>
+    <p class="mt-1 text-slate-600">Personaliza el nombre, el logo, el favicon y los datos del emisor del portal.</p>
 
     @if (session('status'))
         <div class="mt-4 rounded-md bg-green-50 px-4 py-3 text-sm text-green-700 ring-1 ring-green-600/10">
@@ -72,6 +72,91 @@
             </div>
             <div wire:loading wire:target="favicon" class="mt-1 text-xs text-slate-400">Cargando imagen…</div>
             @error('favicon') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+        </div>
+
+        {{-- Datos del emisor (para recibos / órdenes de pago) --}}
+        <div class="border-t border-slate-100 pt-6">
+            <h2 class="text-sm font-semibold text-slate-900">Datos del emisor</h2>
+            <p class="mt-0.5 text-xs text-slate-400">Aparecen como "Datos del emisor" en los recibos de pago. Déjalos vacíos para omitirlos.</p>
+
+            <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-slate-700">Razón social</label>
+                    <input type="text" wire:model="companyLegalName" placeholder="{{ $name ?: 'Portal WORTEV' }}"
+                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    @error('companyLegalName') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-slate-700">RFC</label>
+                    <input type="text" wire:model="companyTaxId"
+                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    @error('companyTaxId') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <div class="sm:col-span-2">
+                    <label class="block text-sm font-medium text-slate-700">Domicilio fiscal</label>
+                    <input type="text" wire:model="companyAddress"
+                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    @error('companyAddress') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Correo</label>
+                    <input type="email" wire:model="companyEmail"
+                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    @error('companyEmail') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-slate-700">Teléfono</label>
+                    <input type="text" wire:model="companyPhone"
+                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                    @error('companyPhone') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+            </div>
+        </div>
+
+        {{-- Diseño de los correos --}}
+        <div class="border-t border-slate-100 pt-6">
+            <h2 class="text-sm font-semibold text-slate-900">Correos electrónicos</h2>
+            <p class="mt-0.5 text-xs text-slate-400">
+                Los correos del portal (tickets, facturas, recordatorios, enlaces de acceso…) se envían con tu logo,
+                nombre y color. Si cambias el logo o el nombre arriba, se aplica solo en el siguiente correo.
+            </p>
+
+            <label class="mt-4 flex items-center gap-2 text-sm text-slate-700">
+                <input type="checkbox" wire:model.live="emailHtmlEnabled"
+                       class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
+                Enviar correos con diseño (si lo apagas, se envían como texto simple)
+            </label>
+
+            @if ($emailHtmlEnabled)
+                <div class="mt-4 grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700">Color</label>
+                        <div class="mt-1 flex items-center gap-2">
+                            <input type="color" wire:model.blur="emailAccent"
+                                   class="h-10 w-12 cursor-pointer rounded-md border border-slate-300 bg-white p-1">
+                            <input type="text" wire:model.blur="emailAccent" maxlength="7" placeholder="#4f46e5"
+                                   class="block w-32 rounded-md border-slate-300 font-mono text-sm shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        </div>
+                        @error('emailAccent') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="block text-sm font-medium text-slate-700">Texto del pie de página</label>
+                        <input type="text" wire:model.blur="emailFooter" maxlength="300"
+                               placeholder="Este mensaje fue enviado automáticamente. Por favor no respondas a este correo."
+                               class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <p class="mt-1 text-xs text-slate-400">Si lo dejas vacío se usa el texto de ejemplo. Debajo se muestran la razón social y el domicilio de «Datos del emisor».</p>
+                        @error('emailFooter') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                    </div>
+                </div>
+
+                <div class="mt-4">
+                    <span class="block text-sm font-medium text-slate-700">Vista previa</span>
+                    <iframe title="Vista previa del correo" srcdoc="{{ $emailPreview }}"
+                            sandbox=""
+                            class="mt-2 h-[28rem] w-full rounded-lg border border-slate-200 bg-slate-100"></iframe>
+                    <p class="mt-1 text-xs text-slate-400">La vista previa usa el logo ya guardado. Para probar un envío real usa «Enviar correo de prueba» en la configuración SMTP.</p>
+                </div>
+            @endif
         </div>
 
         <div class="border-t border-slate-100 pt-6">

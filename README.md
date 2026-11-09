@@ -216,8 +216,11 @@ El entorno incluye dos contenedores que corren solos:
 
 - **queue**: procesa la cola de Redis (notificaciones de tickets, recordatorios).
   Equivale a `php artisan queue:work`.
-- **scheduler**: ejecuta el planificador de Laravel cada minuto
-  (`php artisan schedule:run`), que a su vez dispara `reminders:send` a diario (08:00).
+- **scheduler**: deja corriendo el planificador de Laravel
+  (`php artisan schedule:work`), que dispara las tareas programadas: recordatorios
+  de vencimiento (`reminders:send`, 08:00), expiración de órdenes de pago
+  (`payment-orders:expire`, 03:00) y generación de órdenes de renovación
+  (`payment-orders:generate-renewals`, 03:30).
 
 Ambos se levantan con `docker compose up -d` junto al resto. Para ver su actividad:
 
@@ -235,3 +238,35 @@ docker compose exec app php artisan reminders:send
 Los recordatorios se envían por correo (al cliente y a `RENEWALS_NOTIFY_EMAIL`) y por
 WhatsApp mediante adaptadores **fake** (se registran en el log; no se envía nada real
 hasta conectar proveedores). La tabla `reminders` evita reenviar el mismo aviso.
+
+## Actualización de dependencias (Dependencias / Seguridad)
+
+Desde **Sistema → Dependencias / Seguridad**, cuando hay vulnerabilidades, aparece
+**Actualizar vulnerables**. La operación corre en segundo plano (contenedor `queue`):
+
+1. Audita y detecta los paquetes vulnerables.
+2. Pone la app en mantenimiento (quien la lanzó sigue entrando con su sesión).
+3. Respalda base de datos, `vendor`, lockfiles y assets compilados en
+   `storage/app/dependency-backups` (se conservan los 3 más recientes).
+4. Actualiza solo los paquetes vulnerables (sin `--force` ni saltos de versión mayor),
+   recompila y verifica que la app arranque.
+5. Si algo falla, restaura el código automáticamente. **La base de datos nunca se
+   restaura sola.**
+
+Los respaldos permiten **restaurar el código** (seguro) o **restaurar la base de datos**
+(destructivo: pide escribir `RESTAURAR`; se pierde lo registrado después del respaldo).
+
+### Restauración de emergencia por consola
+
+Si la app quedó en mantenimiento y no se puede usar el panel, desde el servidor:
+
+```bash
+# Listar respaldos disponibles y restaurar el código de la actualización #<id>
+docker compose exec app php artisan dependencies:restore <id>
+
+# Restaurar también la base de datos (destructivo; pide confirmación)
+docker compose exec app php artisan dependencies:restore <id> --database
+
+# Salir del modo mantenimiento
+docker compose exec app php artisan up
+```

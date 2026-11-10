@@ -465,3 +465,19 @@ docker compose exec app php artisan about  # resumen de entorno y config
 | No llegan avisos ni se confirman pagos | El worker no procesa la cola `integrations` |
 | La app se cae sola de vez en cuando | Falta de memoria: revisa `free -h`, swap y `MYSQL_BUFFER_POOL` |
 | Enlaces de correo con `http://` o `localhost` | `APP_URL` incorrecto; luego `php artisan optimize` |
+| No sale ningún correo / `504` al registrarse | DigitalOcean **bloquea el SMTP saliente** (puertos 25, 465, 587) en cuentas nuevas. Prueba el puerto (abajo) y usa el **2525** de tu proveedor o pide el desbloqueo a soporte |
+
+### Probar si el Droplet puede llegar a tu SMTP
+
+```bash
+# Desde el Droplet (cambia el host por el de tu proveedor de correo):
+for p in 25 465 587 2525; do timeout 5 bash -c "</dev/tcp/smtp.tu-proveedor.com/$p" \
+  && echo "puerto $p ABIERTO" || echo "puerto $p BLOQUEADO"; done
+```
+
+- Si **587/465 salen bloqueados** y el **2525** abierto: cambia el puerto del SMTP a `2525` en
+  **Sistema → Integraciones → SMTP** (lo ofrecen SendGrid, Mailgun, Brevo y otros).
+- Si todos salen bloqueados: abre un ticket a soporte de DigitalOcean pidiendo habilitar el
+  SMTP saliente, o usa un proveedor con API HTTP.
+- Después prueba con el botón **Probar** del panel SMTP y revisa
+  `docker compose logs -f queue` (la verificación de cuenta sale por la cola).

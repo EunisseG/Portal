@@ -56,6 +56,15 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
     }
 
+    /**
+     * Envía el correo de verificación por la cola, para que el registro no
+     * dependa de que el SMTP responda a tiempo (ver QueuedVerifyEmail).
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new \App\Notifications\QueuedVerifyEmail);
+    }
+
     public function client(): HasOne
     {
         return $this->hasOne(Client::class);

@@ -33,7 +33,10 @@ Marca cada punto. Los comandos asumen que corres desde la raíz del proyecto
 - [ ] **DNS**: dominio apuntando a la IP del servidor (registro A / AAAA)
 - [ ] **TLS/HTTPS** disponible (certificado para el dominio; ver sección 7)
 - [ ] Acceso de red saliente al **WHM** de cada servidor de hosting (puerto `2087/tcp`)
-- [ ] Acceso de red saliente a internet (Composer/npm, MercadoPago, Meta/WhatsApp, SMTP)
+- [ ] Acceso de red saliente a internet (Composer/npm, MercadoPago, Meta/WhatsApp, SMTP).
+      ⚠️ Varios proveedores (DigitalOcean incluido) **bloquean el SMTP saliente** (25, 465,
+      587) en cuentas nuevas: comprueba el puerto antes de configurar el correo, o usa el
+      **2525** de tu proveedor.
 - [ ] Reloj del servidor sincronizado (NTP) — importante para tokens, 2FA y expiraciones
 - [ ] Repositorio clonado en el servidor:
       `git clone https://github.com/EunisseG/Portal.git portal-wortev`

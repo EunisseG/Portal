@@ -18,6 +18,13 @@ class SmtpSettings
     public const KEY_FROM_ADDRESS = 'smtp.from_address';
     public const KEY_FROM_NAME = 'smtp.from_name';
 
+    /**
+     * Segundos máximos para conectar con el SMTP y esperar su respuesta. Muy por
+     * debajo del límite de nginx (60 s), para que un SMTP inalcanzable nunca
+     * provoque un 504.
+     */
+    public const TIMEOUT_SECONDS = 10;
+
     public function host(): ?string
     {
         return Setting::get(self::KEY_HOST) ?: null;

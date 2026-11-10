@@ -10,8 +10,10 @@ use Illuminate\Mail\Mailer;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\HtmlString;
 use Symfony\Component\Mailer\Transport\Dsn;
-use Symfony\Component\Mailer\Transport\TransportInterface;
+use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransport;
 use Symfony\Component\Mailer\Transport\Smtp\EsmtpTransportFactory;
+use Symfony\Component\Mailer\Transport\Smtp\Stream\SocketStream;
+use Symfony\Component\Mailer\Transport\TransportInterface;
 
 /**
  * Adaptador de correo real por SMTP. Construye el transporte en runtime a
@@ -90,6 +92,14 @@ class SmtpMailGateway implements MailGateway
             $this->settings->port(),
         );
 
-        return (new EsmtpTransportFactory())->create($dsn);
+        $transport = (new EsmtpTransportFactory())->create($dsn);
+
+        // Tiempo límite de conexión y lectura: si el SMTP no responde (puerto
+        // bloqueado, host caído) el envío falla pronto en vez de colgarse.
+        if ($transport instanceof EsmtpTransport && $transport->getStream() instanceof SocketStream) {
+            $transport->getStream()->setTimeout(SmtpSettings::TIMEOUT_SECONDS);
+        }
+
+        return $transport;
     }
 }

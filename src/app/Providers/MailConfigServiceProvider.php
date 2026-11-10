@@ -68,6 +68,9 @@ class MailConfigServiceProvider extends ServiceProvider
             'mail.mailers.smtp.port' => $settings->port(),
             'mail.mailers.smtp.username' => $settings->username(),
             'mail.mailers.smtp.password' => $settings->password(),
+            // Si el SMTP no responde (puerto bloqueado, host caído) se falla
+            // pronto en lugar de colgar la petición hasta el 504 de nginx.
+            'mail.mailers.smtp.timeout' => SmtpSettings::TIMEOUT_SECONDS,
             'mail.from.address' => $settings->fromAddress(),
             'mail.from.name' => $settings->fromName(),
         ]);

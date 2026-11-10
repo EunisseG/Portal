@@ -214,8 +214,10 @@ docker compose down -v    # Detiene y elimina también los volúmenes (borra dat
 
 El entorno incluye dos contenedores que corren solos:
 
-- **queue**: procesa la cola de Redis (notificaciones de tickets, recordatorios).
-  Equivale a `php artisan queue:work`.
+- **queue**: procesa las colas de Redis `default` e `integrations`
+  (`php artisan queue:work --queue=default,integrations`). En `integrations` van los
+  avisos de factura y comprobante, WhatsApp, Slack, alertas de SLA, mantenimientos y el
+  webhook de MercadoPago.
 - **scheduler**: deja corriendo el planificador de Laravel
   (`php artisan schedule:work`), que dispara las tareas programadas: recordatorios
   de vencimiento (`reminders:send`, 08:00), expiración de órdenes de pago

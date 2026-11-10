@@ -25,12 +25,15 @@ services:
   # -------------------------------------------------------------------
   # queue: worker que procesa la cola (notificaciones, jobs). Reusa la
   # imagen de la app. Se reinicia solo si falla.
+  # Procesa DOS colas: "default" y "integrations" (avisos de factura y
+  # comprobante, WhatsApp, Slack, SLA, mantenimientos, webhooks de pago).
+  # Sin --queue solo se procesaría "default" y esos avisos nunca saldrían.
   # -------------------------------------------------------------------
   queue:
     image: portal-wortev/app
     container_name: portal-wortev-queue
     working_dir: /var/www/html
-    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    command: php artisan queue:work --queue=default,integrations --sleep=3 --tries=3 --max-time=3600
     restart: unless-stopped
     volumes:
       - ./src:/var/www/html

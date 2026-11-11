@@ -27,6 +27,7 @@ class PlanService
             $plan = Plan::create([
                 'name' => $data['name'],
                 'type' => $data['type'],
+                'category_id' => $data['category_id'] ?? null,
                 'description' => $data['description'] ?? null,
                 'is_active' => $data['is_active'] ?? true,
             ]);
@@ -52,6 +53,7 @@ class PlanService
             $plan->update([
                 'name' => $data['name'],
                 'type' => $data['type'],
+                'category_id' => array_key_exists('category_id', $data) ? $data['category_id'] : $plan->category_id,
                 'description' => $data['description'] ?? null,
                 'is_active' => $data['is_active'] ?? true,
             ]);

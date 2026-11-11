@@ -198,22 +198,115 @@ class ServiceManagementTest extends TestCase
             ->assertSet('server_id', '');
     }
 
-    public function test_plan_selector_only_when_type_has_plans(): void
+    public function test_category_lists_its_products_including_hosting_plans(): void
     {
-        // Plan activo de tipo hosting.
-        $plan = \App\Domain\Services\Models\Plan::create([
-            'name' => 'Hosting Plan',
-            'type' => ServiceType::Hosting->value,
-            'is_active' => true,
+        $hosting = \App\Domain\Services\Models\ProductCategory::create(['title' => 'Hosting']);
+        $other = \App\Domain\Services\Models\ProductCategory::create(['title' => 'Licencias']);
+
+        // Los planes de hosting llegan a Productos con su categoría.
+        app(\App\Domain\Services\Services\PlanService::class)->create(
+            ['name' => 'Hosting Pro', 'type' => 'hosting', 'category_id' => $hosting->id, 'is_active' => true],
+            ['monthly' => ['unit_price' => '199', 'tax_rate' => '16']],
+        );
+        app(\App\Domain\Services\Services\PlanService::class)->create(
+            ['name' => 'Hosting Idea', 'type' => 'hosting', 'category_id' => $hosting->id, 'is_active' => true],
+            ['annual' => ['unit_price' => '999', 'tax_rate' => '16']],
+        );
+        \App\Domain\Services\Models\Product::create([
+            'name' => 'Licencia X', 'type' => 'license', 'billing_mode' => 'one_time', 'category_id' => $other->id,
+            'price_cents' => 50000, 'tax_rate' => 16, 'currency' => 'MXN', 'is_active' => true,
         ]);
 
         Livewire::actingAs($this->admin())
             ->test(ServiceForm::class)
-            ->set('type', ServiceType::Hosting->value)
-            ->assertSee('Plan (opcional)')
-            // Email no tiene planes → no se muestra el selector.
+            ->assertSee('Categoría')
+            ->set('category_id', (string) $hosting->id)
+            ->assertSee('Hosting Pro')
+            ->assertSee('Hosting Idea')
+            ->assertDontSee('Licencia X');
+    }
+
+    public function test_choosing_a_product_fills_name_type_plan_and_pricing(): void
+    {
+        $category = \App\Domain\Services\Models\ProductCategory::create(['title' => 'Hosting']);
+        $plan = app(\App\Domain\Services\Services\PlanService::class)->create(
+            ['name' => 'Hosting Pro', 'type' => 'hosting', 'category_id' => $category->id, 'is_active' => true],
+            ['annual' => ['unit_price' => '1999', 'tax_rate' => '16']],
+        );
+        $product = \App\Domain\Services\Models\Product::where('plan_id', $plan->id)->firstOrFail();
+
+        $this->assertSame($category->id, $product->category_id);
+
+        Livewire::actingAs($this->admin())
+            ->test(ServiceForm::class)
             ->set('type', ServiceType::Email->value)
-            ->assertDontSee('Plan (opcional)');
+            ->set('category_id', (string) $category->id)
+            ->set('product_id', (string) $product->id)
+            ->assertSet('name', 'Hosting Pro')
+            ->assertSet('type', ServiceType::Hosting->value)
+            ->assertSet('plan_id', (string) $plan->id)
+            ->assertSet('billing_cycle', 'annual')
+            ->assertSet('unit_price', '1999.00')
+            ->assertSet('tax_rate', '16');
+    }
+
+    public function test_order_from_product_saves_product_and_selected_addons(): void
+    {
+        $client = Client::factory()->create();
+        $product = \App\Domain\Services\Models\Product::create([
+            'name' => 'Licencia Office', 'type' => 'license', 'billing_mode' => 'one_time',
+            'price_cents' => 100000, 'tax_rate' => 16, 'currency' => 'MXN', 'is_active' => true,
+        ]);
+        $addon = \App\Domain\Services\Models\AddonCatalogItem::create([
+            'name' => 'Soporte extra', 'billing_mode' => 'one_time', 'price_cents' => 20000,
+            'currency' => 'MXN', 'is_active' => true,
+        ]);
+
+        Livewire::actingAs($this->admin())
+            ->test(ServiceForm::class)
+            ->set('client_id', (string) $client->id)
+            ->set('category_id', 'none')
+            ->set('product_id', (string) $product->id)
+            ->set('selectedAddons.'.$addon->id, true)
+            ->assertSee('Complemento: Soporte extra')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $service = Service::where('client_id', $client->id)->with('addons')->firstOrFail();
+        $this->assertSame($product->id, $service->product_id);
+        $this->assertSame('Licencia Office', $service->name);
+        $this->assertCount(1, $service->addons);
+        $this->assertSame($addon->id, $service->addons->first()->catalog_item_id);
+        $this->assertSame(20000, $service->addons->first()->price_cents);
+        // (1000 + 200) + 16% IVA.
+        $this->assertSame(139200, $service->total_cents);
+    }
+
+    public function test_domain_extension_from_products_sets_name_and_price(): void
+    {
+        $client = Client::factory()->create();
+        $mx = \App\Domain\Services\Models\Product::create([
+            'name' => '.mx', 'type' => 'domain', 'billing_mode' => 'one_time',
+            'price_cents' => 45000, 'tax_rate' => 16, 'currency' => 'MXN', 'is_active' => true,
+        ]);
+
+        Livewire::actingAs($this->admin())
+            ->test(ServiceForm::class)
+            ->set('client_id', (string) $client->id)
+            ->set('product_id', 'manual')
+            ->set('type', ServiceType::Hosting->value)
+            ->set('name', 'Hosting manual')
+            ->set('unit_price', '100')
+            ->set('domainMode', 'new')
+            ->set('domainName', 'midominio')
+            ->set('domainOrigin', 'purchase')
+            ->assertSee('.mx')
+            ->set('domainTldId', (string) $mx->id)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertDatabaseHas('domains', ['client_id' => $client->id, 'name' => 'midominio.mx']);
+        $this->assertDatabaseHas('addons', ['is_domain' => true, 'name' => 'Dominio (midominio.mx)', 'price_cents' => 45000]);
     }
 
     public function test_client_search_filters_the_list(): void
@@ -244,20 +337,14 @@ class ServiceManagementTest extends TestCase
             ->assertSet('clientSearch', ''); // se limpia la búsqueda al seleccionar
     }
 
-    public function test_service_name_field_hidden_when_plan_selected(): void
+    public function test_manual_mode_shows_type_and_free_name(): void
     {
-        $plan = \App\Domain\Services\Models\Plan::create([
-            'name' => 'Hosting Plan',
-            'type' => ServiceType::Hosting->value,
-            'is_active' => true,
-        ]);
-
         Livewire::actingAs($this->admin())
             ->test(ServiceForm::class)
-            ->set('type', ServiceType::Hosting->value)
-            ->assertSee('Nombre del servicio')       // sin plan: campo visible
-            ->set('plan_id', (string) $plan->id)
-            ->assertDontSee('Nombre del servicio');   // con plan: se toma del plan
+            ->assertDontSee('Otro tipo de servicio')
+            ->set('product_id', 'manual')
+            ->assertSee('Tipo')
+            ->assertSeeHtml('id="order-name"');
     }
 
     public function test_domain_block_only_for_hosting(): void

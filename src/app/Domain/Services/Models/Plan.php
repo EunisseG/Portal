@@ -25,6 +25,7 @@ class Plan extends Model
     protected $fillable = [
         'name',
         'type',
+        'category_id',
         'description',
         'is_active',
     ];
@@ -43,5 +44,11 @@ class Plan extends Model
     public function prices(): HasMany
     {
         return $this->hasMany(PlanPrice::class);
+    }
+
+    /** Categoría de productos en la que aparece el plan (vía su producto espejo). */
+    public function category(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(ProductCategory::class, 'category_id');
     }
 }

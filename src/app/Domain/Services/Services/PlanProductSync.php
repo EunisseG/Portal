@@ -43,6 +43,8 @@ class PlanProductSync
             'plan_id' => $plan->id,
             'name' => $plan->name,
             'type' => $this->mapType($plan->type),
+            // La categoría del plan define en qué categoría se ofrece al pedir.
+            'category_id' => $plan->category_id,
             // El espejo de un plan siempre es recurrente.
             'billing_mode' => BillingMode::Recurring->value,
             'description' => $plan->description,

@@ -37,7 +37,10 @@ class GenerateRenewalPaymentOrders extends Command
         $generated = 0;
 
         foreach ($services as $service) {
+            // Solo cuentan las órdenes del pedido completo; una orden pendiente
+            // de complementos se integra a la de renovación.
             $hasPending = PaymentOrder::where('service_id', $service->id)
+                ->where('kind', PaymentOrder::KIND_SERVICE)
                 ->where('status', PaymentOrderStatus::Pending->value)
                 ->exists();
 
@@ -49,6 +52,7 @@ class GenerateRenewalPaymentOrders extends Command
             // ventana de renovación), no se genera otra.
             $windowStart = $service->expires_at->copy()->subDays($days)->startOfDay();
             $paidThisCycle = PaymentOrder::where('service_id', $service->id)
+                ->where('kind', PaymentOrder::KIND_SERVICE)
                 ->where('status', PaymentOrderStatus::Paid->value)
                 ->where('created_at', '>=', $windowStart)
                 ->exists();

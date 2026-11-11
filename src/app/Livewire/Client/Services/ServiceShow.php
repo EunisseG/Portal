@@ -25,7 +25,12 @@ class ServiceShow extends Component
         // Aislamiento: el servicio debe pertenecer al cliente autenticado.
         abort_unless($service->client_id === $client->id, 404);
 
-        $this->service = $service->load(['addons', 'server', 'domains']);
+        // Solo complementos pagados: los pendientes aún no son del cliente.
+        $this->service = $service->load([
+            'addons' => fn ($q) => $q->whereNotNull('paid_at'),
+            'server',
+            'domains',
+        ]);
     }
 
     /** ¿Este servicio es de hosting y puede mostrar correos? */

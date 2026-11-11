@@ -25,10 +25,17 @@ class Product extends Model
         'category_id',
         'description',
         'price_cents',
+        'tax_rate',
         'currency',
         'is_active',
         'priority',
     ];
+
+    /** Slug del tipo hosting: estos productos solo nacen de un plan. */
+    public const TYPE_HOSTING = 'hosting';
+
+    /** Slug del tipo dominio: el título del producto es la extensión (.com, .mx...). */
+    public const TYPE_DOMAIN = 'domain';
 
     /**
      * @return array<string, string>
@@ -36,10 +43,12 @@ class Product extends Model
     protected function casts(): array
     {
         return [
-            // 'type' es un slug libre del catálogo de tipos (ProductTypeItem),
-            // ya no un enum fijo, para permitir tipos personalizados.
+            // 'type' ("Funciona como") guarda el valor de ProductType; se deja
+            // como string para tolerar valores antiguos (se leen como "Otro").
             'billing_mode' => \App\Domain\Services\Enums\BillingMode::class,
             'price_cents' => 'integer',
+            // IVA del pago único (los recurrentes lo llevan por ciclo).
+            'tax_rate' => 'decimal:2',
             'is_active' => 'boolean',
             'priority' => 'integer',
         ];
@@ -52,9 +61,8 @@ class Product extends Model
             return '—';
         }
 
-        $item = ProductTypeItem::where('slug', $this->type)->first();
-
-        return $item?->label ?? ucfirst((string) $this->type);
+        return (\App\Domain\Services\Enums\ProductType::tryFrom((string) $this->type)
+            ?? \App\Domain\Services\Enums\ProductType::Custom)->label();
     }
 
     public function category(): BelongsTo
@@ -88,6 +96,54 @@ class Product extends Model
     public function isOneTime(): bool
     {
         return $this->billing_mode === BillingMode::OneTime;
+    }
+
+    /** ¿Es una extensión de dominio (.com, .mx...)? */
+    public function isDomain(): bool
+    {
+        return $this->type === self::TYPE_DOMAIN;
+    }
+
+    /** Extensión normalizada del producto de dominio (".com.mx"). */
+    public function tld(): string
+    {
+        return '.'.ltrim(strtolower(trim((string) $this->name)), '.');
+    }
+
+    /** Tipo de pedido (servicio) que genera este producto. */
+    public function serviceType(): \App\Domain\Services\Enums\ServiceType
+    {
+        return \App\Domain\Services\Enums\ServiceType::tryFrom((string) $this->type)
+            ?? \App\Domain\Services\Enums\ServiceType::Other;
+    }
+
+    /**
+     * Precio unitario e IVA para un ciclo: el del ciclo (recurrente) o el
+     * precio plano con su IVA (pago único).
+     *
+     * @return array{unit_cents:int, tax_rate:float, cycle:?\App\Domain\Services\Enums\BillingCycle}
+     */
+    public function pricingFor(?string $cycleValue): array
+    {
+        if ($this->isRecurring()) {
+            $this->loadMissing('prices');
+            $price = $this->prices->first(fn ($p) => $p->billing_cycle->value === $cycleValue)
+                ?? $this->prices->first();
+
+            if ($price) {
+                return [
+                    'unit_cents' => (int) $price->unit_price_cents,
+                    'tax_rate' => (float) $price->tax_rate,
+                    'cycle' => $price->billing_cycle,
+                ];
+            }
+        }
+
+        return [
+            'unit_cents' => (int) $this->price_cents,
+            'tax_rate' => (float) ($this->tax_rate ?? 0),
+            'cycle' => null,
+        ];
     }
 
     /** Precio de pago único como Money. */

@@ -27,91 +27,113 @@
             'label' => 'Usuarios',
             'pattern' => 'admin/clientes*|admin/ejecutivos*|admin/empleados*',
             'items' => [
-                ['route' => 'admin.clients.index', 'label' => 'Clientes', 'pattern' => 'admin/clientes*'],
-                ['route' => 'admin.employees.index', 'label' => 'Empleados', 'pattern' => 'admin/empleados*'],
-                ['route' => 'admin.sales-reps.index', 'label' => 'Ejecutivos de ventas', 'pattern' => 'admin/ejecutivos*'],
+                ['route' => 'admin.clients.index', 'label' => 'Clientes', 'pattern' => 'admin/clientes*', 'can' => 'clients.view'],
+                ['route' => 'admin.employees.index', 'label' => 'Empleados', 'pattern' => 'admin/empleados*', 'can' => 'employees.manage'],
+                ['route' => 'admin.sales-reps.index', 'label' => 'Ejecutivos de ventas', 'pattern' => 'admin/ejecutivos*', 'can' => 'sales_reps.manage'],
             ],
         ],
         [
             'label' => 'Pagos',
             'pattern' => 'admin/facturas*|admin/ordenes-pago*|admin/monedas*',
             'items' => [
-                ['route' => 'admin.invoices.index', 'label' => 'Facturas', 'pattern' => 'admin/facturas*'],
-                ['route' => 'admin.payment-orders.index', 'label' => 'Órdenes de pago', 'pattern' => 'admin/ordenes-pago*'],
-                ['route' => 'admin.currencies.index', 'label' => 'Tipos de moneda', 'pattern' => 'admin/monedas*'],
+                ['route' => 'admin.invoices.index', 'label' => 'Facturas', 'pattern' => 'admin/facturas*', 'can' => 'invoices.view'],
+                ['route' => 'admin.payment-orders.index', 'label' => 'Órdenes de pago', 'pattern' => 'admin/ordenes-pago*', 'can' => 'invoices.view'],
+                ['route' => 'admin.currencies.index', 'label' => 'Tipos de moneda', 'pattern' => 'admin/monedas*', 'can' => 'currencies.manage'],
             ],
         ],
         [
             'label' => 'Pedidos',
             'pattern' => 'admin/servicios*',
             'route' => 'admin.services.index',
+            'can' => 'services.view',
             'items' => [],
         ],
         [
             'label' => 'Productos',
             'pattern' => 'admin/productos*|admin/complementos*|admin/catalogo-complementos*|admin/promociones*',
             'items' => [
-                ['route' => 'admin.products.index', 'label' => 'Productos / Servicios', 'pattern' => 'admin/productos*'],
-                ['route' => 'admin.addon-catalog.index', 'label' => 'Complementos', 'pattern' => 'admin/catalogo-complementos*|admin/complementos*'],
-                ['route' => 'admin.promotions.index', 'label' => 'Promociones de productos', 'pattern' => 'admin/promociones*'],
+                ['route' => 'admin.products.index', 'label' => 'Productos / Servicios', 'pattern' => 'admin/productos*', 'can' => 'plans.manage'],
+                ['route' => 'admin.addon-catalog.index', 'label' => 'Complementos', 'pattern' => 'admin/catalogo-complementos*|admin/complementos*', 'can' => 'addons.manage'],
+                ['route' => 'admin.promotions.index', 'label' => 'Promociones de productos', 'pattern' => 'admin/promociones*', 'can' => 'plans.manage'],
             ],
         ],
         [
             'label' => 'Soporte',
             'pattern' => 'admin/tickets*|admin/tickets-internos*|admin/respuestas*|admin/kb*|admin/vencimientos*|admin/satisfaccion*|admin/sla*',
             'items' => [
-                ['route' => 'admin.tickets.index', 'label' => 'Tickets de clientes', 'pattern' => 'admin/tickets|admin/tickets/*'],
-                ['route' => 'admin.internal-tickets.index', 'label' => 'Tickets internos', 'pattern' => 'admin/tickets-internos*'],
-                ['route' => 'admin.sla.index', 'label' => 'SLA / Soporte', 'pattern' => 'admin/sla*'],
-                ['route' => 'admin.canned.index', 'label' => 'Respuestas preparadas', 'pattern' => 'admin/respuestas-preparadas*'],
-                ['route' => 'admin.kb.articles.index', 'label' => 'Base de conocimiento', 'pattern' => 'admin/kb*'],
-                ['route' => 'admin.renewals.index', 'label' => 'Vencimientos', 'pattern' => 'admin/vencimientos*'],
-                ['route' => 'admin.satisfaction.index', 'label' => 'Satisfacción', 'pattern' => 'admin/satisfaccion*'],
+                ['route' => 'admin.tickets.index', 'label' => 'Tickets de clientes', 'pattern' => 'admin/tickets|admin/tickets/*', 'can' => 'tickets.view'],
+                ['route' => 'admin.internal-tickets.index', 'label' => 'Tickets internos', 'pattern' => 'admin/tickets-internos*', 'can' => 'internal_tickets.view'],
+                ['route' => 'admin.sla.index', 'label' => 'SLA / Soporte', 'pattern' => 'admin/sla*', 'can' => 'tickets.view'],
+                ['route' => 'admin.canned.index', 'label' => 'Respuestas preparadas', 'pattern' => 'admin/respuestas-preparadas*', 'can' => 'tickets.manage'],
+                ['route' => 'admin.kb.articles.index', 'label' => 'Base de conocimiento', 'pattern' => 'admin/kb*', 'can' => 'kb.view'],
+                ['route' => 'admin.renewals.index', 'label' => 'Vencimientos', 'pattern' => 'admin/vencimientos*', 'can' => 'services.view'],
+                ['route' => 'admin.satisfaction.index', 'label' => 'Satisfacción', 'pattern' => 'admin/satisfaccion*', 'can' => 'tickets.view'],
             ],
         ],
         [
             'label' => 'Sistema',
             'pattern' => 'admin/graficas*|admin/planes*|admin/servidores*|admin/configuracion*|admin/integraciones*|admin/areas-internas*|admin/encuestas*',
             'items' => [
-                ['route' => 'admin.reports.index', 'label' => 'Gráficas', 'pattern' => 'admin/graficas*'],
-                ['route' => 'admin.servers.index', 'label' => 'Servidores / Planes', 'pattern' => 'admin/servidores*|admin/planes*'],
-                ['route' => 'admin.internal-areas.index', 'label' => 'Áreas internas', 'pattern' => 'admin/areas-internas*'],
-                ['route' => 'admin.surveys.index', 'label' => 'Encuestas', 'pattern' => 'admin/encuestas*'],
-                ['route' => 'admin.settings.branding', 'label' => 'Apariencia', 'pattern' => 'admin/configuracion/apariencia*'],
-                ['route' => 'admin.settings.operation', 'label' => 'Modo de operación', 'pattern' => 'admin/configuracion/operacion*'],
-                ['route' => 'admin.integrations.index', 'label' => 'Integraciones', 'pattern' => 'admin/integraciones|admin/integraciones/catalogo*'],
-                ['route' => 'admin.integrations.logs', 'label' => 'Registros de integración', 'pattern' => 'admin/integraciones/logs*'],
+                ['route' => 'admin.reports.index', 'label' => 'Gráficas', 'pattern' => 'admin/graficas*', 'can' => 'reports.view'],
+                ['route' => 'admin.servers.index', 'label' => 'Servidores / Planes', 'pattern' => 'admin/servidores*|admin/planes*', 'can' => 'servers.manage'],
+                ['route' => 'admin.internal-areas.index', 'label' => 'Áreas internas', 'pattern' => 'admin/areas-internas*', 'can' => 'internal_areas.manage'],
+                ['route' => 'admin.surveys.index', 'label' => 'Encuestas', 'pattern' => 'admin/encuestas*', 'can' => 'surveys.manage'],
+                ['route' => 'admin.settings.branding', 'label' => 'Apariencia', 'pattern' => 'admin/configuracion/apariencia*', 'can' => 'settings.manage'],
+                ['route' => 'admin.settings.operation', 'label' => 'Modo de operación', 'pattern' => 'admin/configuracion/operacion*', 'can' => 'settings.manage'],
+                ['route' => 'admin.integrations.index', 'label' => 'Integraciones', 'pattern' => 'admin/integraciones|admin/integraciones/catalogo*', 'can' => 'integrations.manage'],
+                ['route' => 'admin.integrations.logs', 'label' => 'Registros de integración', 'pattern' => 'admin/integraciones/logs*', 'can' => 'integrations.manage'],
             ],
         ],
         [
             'label' => 'Seguridad',
             'pattern' => 'admin/usuarios*|admin/auditoria*|admin/seguridad*|admin/roles*|admin/sistema/dependencias*',
             'items' => [
-                ['route' => 'admin.users.index', 'label' => 'Usuarios', 'pattern' => 'admin/usuarios*'],
-                ['route' => 'admin.roles.index', 'label' => 'Roles y permisos', 'pattern' => 'admin/roles*'],
-                ['route' => 'admin.audit.index', 'label' => 'Auditoría', 'pattern' => 'admin/auditoria*'],
-                ['route' => 'admin.security.failed-logins', 'label' => 'Accesos fallidos', 'pattern' => 'admin/seguridad*'],
-                ['route' => 'admin.system.dependencies', 'label' => 'Dependencias / Seguridad', 'pattern' => 'admin/sistema/dependencias*'],
+                ['route' => 'admin.users.index', 'label' => 'Usuarios', 'pattern' => 'admin/usuarios*', 'can' => 'users.view'],
+                ['route' => 'admin.roles.index', 'label' => 'Roles y permisos', 'pattern' => 'admin/roles*', 'can' => 'roles.manage'],
+                ['route' => 'admin.audit.index', 'label' => 'Auditoría', 'pattern' => 'admin/auditoria*', 'can' => 'audit.view'],
+                ['route' => 'admin.security.failed-logins', 'label' => 'Accesos fallidos', 'pattern' => 'admin/seguridad*', 'can' => 'security.view'],
+                ['route' => 'admin.system.dependencies', 'label' => 'Dependencias / Seguridad', 'pattern' => 'admin/sistema/dependencias*', 'can' => 'security.manage'],
             ],
         ],
         [
             'label' => 'Actividad',
             'pattern' => 'admin/actividad*',
             'items' => [
-                ['route' => 'admin.activity.staff-logins', 'label' => 'Inicio de sesión del personal', 'pattern' => 'admin/actividad/accesos-personal*'],
-                ['route' => 'admin.activity.client-logins', 'label' => 'Inicio de sesión del cliente', 'pattern' => 'admin/actividad/accesos-cliente*'],
-                ['route' => 'admin.activity.emails', 'label' => 'Correos enviados', 'pattern' => 'admin/actividad/correos*'],
+                ['route' => 'admin.activity.staff-logins', 'label' => 'Inicio de sesión del personal', 'pattern' => 'admin/actividad/accesos-personal*', 'can' => 'audit.view'],
+                ['route' => 'admin.activity.client-logins', 'label' => 'Inicio de sesión del cliente', 'pattern' => 'admin/actividad/accesos-cliente*', 'can' => 'audit.view'],
+                ['route' => 'admin.activity.emails', 'label' => 'Correos enviados', 'pattern' => 'admin/actividad/correos*', 'can' => 'audit.view'],
             ],
         ],
         [
             'label' => 'Anuncios',
             'pattern' => 'admin/noticias*|admin/mantenimientos*',
             'items' => [
-                ['route' => 'admin.news.index', 'label' => 'Noticias', 'pattern' => 'admin/noticias*'],
-                ['route' => 'admin.maintenances.index', 'label' => 'Mantenimientos', 'pattern' => 'admin/mantenimientos*'],
+                ['route' => 'admin.news.index', 'label' => 'Noticias', 'pattern' => 'admin/noticias*', 'can' => 'news.view'],
+                ['route' => 'admin.maintenances.index', 'label' => 'Mantenimientos', 'pattern' => 'admin/mantenimientos*', 'can' => 'news.manage'],
             ],
         ],
     ];
+
+    /*
+     | Oculta lo que el usuario no puede abrir: cada ítem lleva en 'can' el
+     | permiso que exige su pantalla. Un grupo sin ítems visibles desaparece.
+     | (Las pantallas siguen validando el permiso por su cuenta.)
+     */
+    $navUser = auth()->user();
+    $allowed = fn (array $entry) => empty($entry['can']) || ($navUser && $navUser->can($entry['can']));
+    $adminGroups = collect($adminGroups)
+        ->map(function (array $group) use ($allowed) {
+            if (empty($group['items'])) {
+                return $allowed($group) ? $group : null;
+            }
+
+            $group['items'] = array_values(array_filter($group['items'], $allowed));
+
+            return $group['items'] === [] ? null : $group;
+        })
+        ->filter()
+        ->values()
+        ->all();
 
     $clientNav = [
         ['route' => 'client.dashboard', 'label' => 'Inicio', 'pattern' => 'client'],

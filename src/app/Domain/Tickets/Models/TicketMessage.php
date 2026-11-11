@@ -54,4 +54,10 @@ class TicketMessage extends Model
     {
         return $this->hasMany(TicketAttachment::class);
     }
+
+    /** Cuerpo listo para mostrar: HTML sanitizado o texto plano escapado. */
+    public function bodyHtml(): string
+    {
+        return \App\Support\RichText::toHtml($this->body);
+    }
 }

@@ -23,6 +23,7 @@ class PaymentOrder extends Model
         'folio',
         'client_id',
         'service_id',
+        'kind',
         'invoice_id',
         'amount_cents',
         'subtotal_cents',
@@ -55,6 +56,17 @@ class PaymentOrder extends Model
             'expires_at' => 'datetime',
             'paid_at' => 'datetime',
         ];
+    }
+
+    /** Orden del pedido completo (alta o renovación). */
+    public const KIND_SERVICE = 'service';
+
+    /** Orden solo de complementos agregados a un pedido ya pagado. */
+    public const KIND_ADDONS = 'addons';
+
+    public function isForAddons(): bool
+    {
+        return $this->kind === self::KIND_ADDONS;
     }
 
     public function client(): BelongsTo

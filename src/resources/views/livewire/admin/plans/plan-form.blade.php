@@ -24,6 +24,19 @@
         </div>
 
         <div>
+            <label for="plan-category" class="block text-sm font-medium text-slate-700">Categoría de productos</label>
+            <select id="plan-category" wire:model="category_id"
+                    class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                <option value="">— Sin categoría —</option>
+                @foreach ($categoryOptions as $id => $title)
+                    <option value="{{ $id }}">{{ $title }}</option>
+                @endforeach
+            </select>
+            <p class="mt-1 text-xs text-slate-400">El plan aparece en Productos y, al hacer un pedido, dentro de esta categoría (p. ej. "Hosting"). Las categorías se crean en Productos → Categorías.</p>
+            @error('category_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+        </div>
+
+        <div>
             <label class="block text-sm font-medium text-slate-700">Descripción</label>
             <textarea wire:model="description" rows="2"
                       class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500"></textarea>

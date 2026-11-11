@@ -57,6 +57,16 @@ class TicketPolicy
     }
 
     /**
+     * Cerrar el ticket desde el portal: quien puede responder puede cerrarlo,
+     * siempre que no esté cerrado ya.
+     */
+    public function close(User $user, Ticket $ticket): bool
+    {
+        return $ticket->status !== \App\Domain\Tickets\Enums\TicketStatus::Closed
+            && $this->reply($user, $ticket);
+    }
+
+    /**
      * Gestionar (cambiar estado/prioridad): staff con permiso. Para internos
      * se exige el permiso de gestión de tickets internos.
      */

@@ -4,7 +4,6 @@ namespace App\Livewire\Admin\Services;
 
 use App\Domain\Services\Models\Product;
 use App\Domain\Services\Models\ProductCategory;
-use App\Domain\Services\Models\ProductTypeItem;
 use Illuminate\Contracts\View\View;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
@@ -33,6 +32,13 @@ class ProductIndex extends Component
     /** Precio para pago único (decimal). */
     public string $oneTimePrice = '';
 
+    /** IVA (%) del pago único. */
+    public string $oneTimeTaxRate = '16';
+
+    /** Filtro de estado del listado: '' (todos), 'active' o 'inactive'. */
+    #[Url(as: 'estado')]
+    public string $statusFilter = '';
+
     /**
      * Ciclos habilitados (recurrente): [billing_cycle => bool].
      *
@@ -57,12 +63,6 @@ class ProductIndex extends Component
     public string $categoryIconUrl = '';
     public string $categoryDescription = '';
 
-    // --- Modal de tipo de producto ---
-    public bool $showTypeModal = false;
-    public ?int $editingTypeId = null;
-    public string $typeLabel = '';
-    public bool $typeActive = true;
-
     public function mount(): void
     {
         Gate::authorize('plans.manage');
@@ -77,7 +77,7 @@ class ProductIndex extends Component
 
     public function setTab(string $tab): void
     {
-        $this->tab = in_array($tab, ['products', 'categories', 'types'], true) ? $tab : 'products';
+        $this->tab = in_array($tab, ['products', 'categories'], true) ? $tab : 'products';
     }
 
     // ===================== Productos =====================
@@ -99,7 +99,8 @@ class ProductIndex extends Component
     {
         Gate::authorize('plans.manage');
         $this->reset('editingProductId', 'productName', 'oneTimePrice');
-        $this->productType = (string) (ProductTypeItem::where('is_active', true)->orderBy('label')->value('slug') ?? 'custom');
+        $this->oneTimeTaxRate = '16';
+        $this->productType = (string) (array_key_first($this->manualTypeOptions()) ?? 'custom');
         $this->billingMode = 'one_time';
         $this->productCategoryId = ProductCategory::query()->value('id');
         $this->resetCycleInputs();
@@ -114,11 +115,15 @@ class ProductIndex extends Component
         // Los productos que vienen de un plan se editan desde el plan.
         abort_if($product->isFromPlan(), 403);
         $this->editingProductId = $product->id;
-        $this->productType = (string) ($product->type ?: 'custom');
+        // Un valor antiguo que ya no existe se edita como "Otro".
+        $this->productType = array_key_exists((string) $product->type, $this->manualTypeOptions())
+            ? (string) $product->type
+            : \App\Domain\Services\Enums\ProductType::Custom->value;
         $this->billingMode = $product->billing_mode?->value ?? 'one_time';
         $this->productCategoryId = $product->category_id;
         $this->productName = $product->name;
         $this->oneTimePrice = $product->price_cents ? number_format($product->price_cents / 100, 2, '.', '') : '';
+        $this->oneTimeTaxRate = (string) (float) ($product->tax_rate ?? 0);
 
         $this->resetCycleInputs();
         foreach ($product->prices as $price) {
@@ -137,14 +142,19 @@ class ProductIndex extends Component
         Gate::authorize('plans.manage');
 
         $data = $this->validate([
-            'productType' => ['required', 'string', Rule::exists('product_type_items', 'slug')->where('is_active', true)],
+            // Hosting no se da de alta aquí: esos productos nacen de un plan
+            // (Sistema → Servidores / Planes).
+            'productType' => ['required', 'string', Rule::in(array_keys($this->manualTypeOptions()))],
             'billingMode' => ['required', Rule::enum(\App\Domain\Services\Enums\BillingMode::class)],
             'productCategoryId' => ['nullable', 'integer', 'exists:product_categories,id'],
             'productName' => ['required', 'string', 'max:255'],
+        ], [
+            'productType.in' => 'Los planes de hosting se dan de alta en Sistema → Servidores / Planes; aquí elige Dominio, Correo, Licencia u Otro.',
         ]);
 
         // Precios según el modo de cobro.
         $oneTimeCents = 0;
+        $oneTimeTax = 0.0;
         $cyclePrices = [];
 
         if ($data['billingMode'] === \App\Domain\Services\Enums\BillingMode::OneTime->value) {
@@ -153,7 +163,13 @@ class ProductIndex extends Component
 
                 return;
             }
+            if (! is_numeric($this->oneTimeTaxRate) || (float) $this->oneTimeTaxRate < 0 || (float) $this->oneTimeTaxRate > 100) {
+                $this->addError('oneTimeTaxRate', 'Ingresa un IVA válido (0 a 100).');
+
+                return;
+            }
             $oneTimeCents = \App\Support\Money::fromDecimal($this->oneTimePrice)->amountInCents;
+            $oneTimeTax = (float) $this->oneTimeTaxRate;
         } else {
             foreach (\App\Domain\Services\Enums\BillingCycle::cases() as $cycle) {
                 $c = $cycle->value;
@@ -194,6 +210,8 @@ class ProductIndex extends Component
             'billing_mode' => $data['billingMode'],
             'category_id' => $data['productCategoryId'] ?: null,
             'price_cents' => $oneTimeCents,
+            // IVA del pago único; en recurrentes va por ciclo (product_prices).
+            'tax_rate' => $oneTimeTax,
             'currency' => 'MXN',
         ];
 
@@ -247,6 +265,42 @@ class ProductIndex extends Component
 
         $this->loadPriorities();
         session()->flash('status', 'Prioridades actualizadas.');
+    }
+
+    /**
+     * Habilita o deshabilita un producto. Si es el espejo de un plan, cambia
+     * también el plan para que no se vuelva a activar al guardar el plan.
+     */
+    public function toggleProduct(int $id): void
+    {
+        Gate::authorize('plans.manage');
+
+        $product = Product::findOrFail($id);
+        $active = ! $product->is_active;
+
+        $product->update(['is_active' => $active]);
+        if ($product->isFromPlan()) {
+            \App\Domain\Services\Models\Plan::whereKey($product->plan_id)->update(['is_active' => $active]);
+        }
+
+        session()->flash('status', $active ? 'Producto habilitado.' : 'Producto deshabilitado.');
+    }
+
+    /** Filtra el listado por estado ('' = todos). */
+    public function filterStatus(string $status): void
+    {
+        $this->statusFilter = in_array($status, ['active', 'inactive'], true) ? $status : '';
+    }
+
+    /**
+     * Opciones de "Funciona como" para dar de alta a mano: todas menos hosting
+     * (los planes de hosting se crean en Servidores / Planes).
+     *
+     * @return array<string, string>
+     */
+    private function manualTypeOptions(): array
+    {
+        return \App\Domain\Services\Enums\ProductType::manualOptions();
     }
 
     // ===================== Categorías =====================
@@ -305,96 +359,18 @@ class ProductIndex extends Component
         session()->flash('status', 'Categoría eliminada.');
     }
 
-    // ===================== Tipos de producto =====================
-
-    public function openTypeModal(): void
-    {
-        Gate::authorize('plans.manage');
-        $this->reset('editingTypeId', 'typeLabel');
-        $this->typeActive = true;
-        $this->resetValidation();
-        $this->showTypeModal = true;
-    }
-
-    public function editType(int $id): void
-    {
-        Gate::authorize('plans.manage');
-        $type = ProductTypeItem::findOrFail($id);
-        $this->editingTypeId = $type->id;
-        $this->typeLabel = $type->label;
-        $this->typeActive = $type->is_active;
-        $this->resetValidation();
-        $this->showTypeModal = true;
-    }
-
-    public function saveType(): void
-    {
-        Gate::authorize('plans.manage');
-
-        $data = $this->validate([
-            'typeLabel' => ['required', 'string', 'max:255'],
-            'typeActive' => ['boolean'],
-        ]);
-
-        if ($this->editingTypeId) {
-            // Solo se edita la etiqueta y el estado; el slug permanece estable
-            // para no romper los productos que ya lo referencian.
-            ProductTypeItem::whereKey($this->editingTypeId)->update([
-                'label' => $data['typeLabel'],
-                'is_active' => $data['typeActive'],
-            ]);
-            session()->flash('status', 'Tipo de producto actualizado.');
-        } else {
-            $slug = ProductTypeItem::slugFor($data['typeLabel']);
-            // Evita colisión de slug agregando sufijo si ya existe.
-            $base = $slug;
-            $i = 2;
-            while (ProductTypeItem::where('slug', $slug)->exists()) {
-                $slug = $base.'_'.$i++;
-            }
-
-            ProductTypeItem::create([
-                'slug' => $slug,
-                'label' => $data['typeLabel'],
-                'is_active' => $data['typeActive'],
-            ]);
-            session()->flash('status', 'Tipo de producto creado.');
-        }
-
-        $this->showTypeModal = false;
-    }
-
-    public function deleteType(int $id): void
-    {
-        Gate::authorize('plans.manage');
-
-        $type = ProductTypeItem::findOrFail($id);
-
-        // No se borra un tipo que esté en uso por algún producto.
-        if (Product::where('type', $type->slug)->exists()) {
-            session()->flash('error', 'No se puede eliminar: hay productos con este tipo. Desactívalo en su lugar.');
-
-            return;
-        }
-
-        $type->delete();
-        session()->flash('status', 'Tipo de producto eliminado.');
-    }
-
     public function render(): View
     {
         $products = collect();
         $categories = collect();
-        $productTypes = collect();
 
         if ($this->tab === 'categories') {
-            $categories = ProductCategory::query()->orderBy('title')->get();
-        } elseif ($this->tab === 'types') {
-            $productTypes = ProductTypeItem::query()->orderBy('label')->get();
+            $categories = ProductCategory::query()->withCount('products')->orderBy('title')->get();
         } else {
             $products = Product::query()
                 ->with(['category', 'prices'])
                 ->when($this->search !== '', fn ($q) => $q->where('name', 'like', "%{$this->search}%"))
+                ->when($this->statusFilter !== '', fn ($q) => $q->where('is_active', $this->statusFilter === 'active'))
                 ->orderBy('priority')
                 ->orderBy('name')
                 ->get();
@@ -426,8 +402,7 @@ class ProductIndex extends Component
         return view('livewire.admin.services.product-index', [
             'products' => $products,
             'categories' => $categories,
-            'productTypes' => $productTypes,
-            'typeOptions' => ProductTypeItem::options(),
+            'typeOptions' => $this->manualTypeOptions(),
             'billingModeOptions' => \App\Domain\Services\Enums\BillingMode::options(),
             'cycles' => \App\Domain\Services\Enums\BillingCycle::cases(),
             'categoryOptions' => ProductCategory::orderBy('title')->pluck('title', 'id'),

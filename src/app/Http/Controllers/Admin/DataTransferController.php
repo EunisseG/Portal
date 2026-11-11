@@ -119,8 +119,8 @@ class DataTransferController extends Controller
 
     public function exportReport(Request $request): BinaryFileResponse
     {
-        // Mismo permiso que la pantalla de Gráficas (ver facturas).
-        Gate::authorize('viewAny', Invoice::class);
+        // Mismo permiso que la pantalla de Gráficas.
+        Gate::authorize('reports.view');
 
         [$from, $to] = $this->dateRange($request);
         // Por defecto: últimos 12 meses (coincide con la pantalla).

@@ -84,7 +84,7 @@ class TicketShow extends Component
         Gate::authorize('reply', $this->ticket);
 
         $data = $this->validate([
-            'body' => ['required', 'string', 'max:5000'],
+            'body' => ['required', 'string', new \App\Rules\RichTextBody],
             'attachments' => ['array', 'max:5'],
             'attachments.*' => ['file', 'max:10240'],
         ]);
@@ -94,6 +94,18 @@ class TicketShow extends Component
         $this->reset('body', 'attachments');
         $this->ticket->refresh();
         session()->flash('status', 'Respuesta enviada.');
+    }
+
+    /** Cierra el ticket (genera la encuesta de satisfacción). */
+    public function close(TicketService $tickets): void
+    {
+        Gate::authorize('close', $this->ticket);
+
+        $tickets->changeStatus($this->ticket, \App\Domain\Tickets\Enums\TicketStatus::Closed);
+
+        $this->reset('body', 'attachments');
+        $this->ticket->refresh();
+        session()->flash('status', 'Ticket cerrado.');
     }
 
     public function render(): View

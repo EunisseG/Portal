@@ -90,12 +90,9 @@ class InvoiceService
                 'currency' => $currency,
             ]);
 
-            // Una línea por cada complemento ACTIVO (los cancelados y los
-            // suspendidos/vencidos no se facturan).
-            foreach ($service->addons as $addon) {
-                if ($addon->status !== AddonStatus::Active) {
-                    continue;
-                }
+            // Una línea por cada complemento que se cobra: los activos, sin los
+            // de pago único ya pagados (los cancelados y vencidos no se facturan).
+            foreach ($service->billableAddons() as $addon) {
                 $invoice->items()->create([
                     'description' => 'Complemento: '.$addon->name,
                     'quantity' => 1,
@@ -113,6 +110,45 @@ class InvoiceService
                     'quantity' => 1,
                     'unit_price_cents' => 0,
                     'amount_cents' => -1 * (int) $service->discount_cents,
+                    'currency' => $currency,
+                ]);
+            }
+
+            $this->audit->log(AuditAction::InvoiceCreated, $invoice, null, $this->snapshot($invoice));
+
+            return $invoice;
+        });
+    }
+
+    /**
+     * Genera la factura de una orden de pago a partir de SUS líneas (p. ej. la
+     * orden solo de complementos de un pedido ya pagado). El total es el de la
+     * orden. Queda pendiente y sin PDF (se cargará después).
+     */
+    public function createFromPaymentOrder(\App\Domain\Billing\Models\PaymentOrder $order, ?string $dueAt = null): Invoice
+    {
+        return DB::transaction(function () use ($order, $dueAt): Invoice {
+            $order->loadMissing('items');
+            $currency = $order->currency ?? Money::DEFAULT_CURRENCY;
+
+            $invoice = Invoice::create([
+                'client_id' => $order->client_id,
+                'service_id' => $order->service_id,
+                'total_cents' => (int) $order->amount_cents,
+                'amount_paid_cents' => 0,
+                'currency' => $currency,
+                'status' => InvoiceStatus::Pending->value,
+                'issued_at' => now()->toDateString(),
+                'due_at' => $dueAt ?: now()->addDays(15)->toDateString(),
+                'notes' => 'Generada desde la orden de pago '.$order->folio.' ('.$order->concept.').',
+            ]);
+
+            foreach ($order->items as $item) {
+                $invoice->items()->create([
+                    'description' => $item->description,
+                    'quantity' => $item->quantity,
+                    'unit_price_cents' => (int) $item->unit_price_cents,
+                    'amount_cents' => (int) $item->amount_cents,
                     'currency' => $currency,
                 ]);
             }

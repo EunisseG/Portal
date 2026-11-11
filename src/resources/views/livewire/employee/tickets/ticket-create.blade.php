@@ -45,9 +45,8 @@
         </div>
 
         <div>
-            <label class="block text-sm font-medium text-slate-700">Descripción</label>
-            <textarea wire:model="body" rows="5"
-                      class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500"></textarea>
+            <p class="block text-sm font-medium text-slate-700">Descripción</p>
+            <x-rich-editor model="body" class="mt-1" label="Descripción" placeholder="Describe tu solicitud con detalle..." />
             @error('body') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
         </div>
 

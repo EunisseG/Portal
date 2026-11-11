@@ -17,6 +17,8 @@ class PlanForm extends Component
 
     public string $name = '';
     public string $type = '';
+    /** Categoría de productos donde se ofrece el plan (p. ej. "Hosting"). */
+    public string $category_id = '';
     public string $description = '';
     public bool $is_active = true;
 
@@ -57,6 +59,7 @@ class PlanForm extends Component
             $this->plan = $plan->load('prices');
             $this->name = $plan->name;
             $this->type = $plan->type->value;
+            $this->category_id = (string) ($plan->category_id ?? '');
             $this->description = (string) $plan->description;
             $this->is_active = $plan->is_active;
 
@@ -81,6 +84,7 @@ class PlanForm extends Component
         $this->validate([
             'name' => ['required', 'string', 'max:255'],
             'type' => ['required', new Enum(ServiceType::class)],
+            'category_id' => ['nullable', 'integer', 'exists:product_categories,id'],
             'description' => ['nullable', 'string', 'max:1000'],
         ]);
 
@@ -118,6 +122,7 @@ class PlanForm extends Component
         $data = [
             'name' => $this->name,
             'type' => $this->type,
+            'category_id' => $this->category_id !== '' ? (int) $this->category_id : null,
             'description' => $this->description ?: null,
             'is_active' => $this->is_active,
         ];
@@ -149,6 +154,7 @@ class PlanForm extends Component
     {
         return view('livewire.admin.plans.plan-form', [
             'typeOptions' => ServiceType::options(),
+            'categoryOptions' => \App\Domain\Services\Models\ProductCategory::orderBy('title')->pluck('title', 'id'),
             'cycles' => BillingCycle::cases(),
         ])->layout('layouts.app', ['area' => 'admin']);
     }

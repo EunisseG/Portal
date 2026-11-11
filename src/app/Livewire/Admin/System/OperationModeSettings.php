@@ -21,7 +21,7 @@ class OperationModeSettings extends Component
 
     public function mount(OperationMode $mode): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $this->paymentsAutomatic = $mode->paymentsAutomatic();
         $this->domainRenewalAutomatic = $mode->domainRenewalAutomatic();
@@ -29,7 +29,7 @@ class OperationModeSettings extends Component
 
     public function save(): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         Setting::put(
             OperationMode::KEY_PAYMENTS,

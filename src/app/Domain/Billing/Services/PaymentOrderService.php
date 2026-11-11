@@ -77,6 +77,7 @@ class PaymentOrderService
                 'folio' => $folio,
                 'client_id' => $service->client_id,
                 'service_id' => $service->id,
+                'kind' => PaymentOrder::KIND_SERVICE,
                 'invoice_id' => null,
                 'amount_cents' => $totalCents,
                 'subtotal_cents' => (int) ($service->subtotal_cents ?? 0),
@@ -108,24 +109,26 @@ class PaymentOrderService
     {
         $currency = $order->currency;
 
+        $serviceRate = (float) ($service->tax_rate ?? 0);
         $baseCents = (int) ($service->unit_price_cents ?? 0);
         $order->items()->create([
             'description' => $service->plan?->name ?: $service->name,
             'quantity' => 1,
             'unit_price_cents' => $baseCents,
             'amount_cents' => $baseCents,
+            'tax_rate' => $serviceRate,
             'currency' => $currency,
         ]);
 
-        foreach ($service->addons as $addon) {
-            if ($addon->status !== AddonStatus::Active) {
-                continue;
-            }
+        // Complementos que se cobran (activos, sin los de pago único ya pagados).
+        foreach ($service->billableAddons() as $addon) {
             $order->items()->create([
+                'addon_id' => $addon->id,
                 'description' => 'Complemento: '.$addon->name,
                 'quantity' => 1,
                 'unit_price_cents' => (int) $addon->price_cents,
                 'amount_cents' => (int) $addon->price_cents,
+                'tax_rate' => $addon->effectiveTaxRate($serviceRate),
                 'currency' => $currency,
             ]);
         }
@@ -140,6 +143,109 @@ class PaymentOrderService
                 'currency' => $currency,
             ]);
         }
+    }
+
+    /**
+     * Genera el cobro de los complementos tras agregarlos (o quitarlos) desde
+     * el admin:
+     *  - Si el pedido tiene una orden del pedido completo pendiente (aún no se
+     *    paga), se regenera esa orden e incluye los complementos.
+     *  - Si el pedido ya está pagado, se genera una orden aparte SOLO con los
+     *    complementos pendientes de pago (sin volver a cobrar el servicio).
+     * Devuelve la orden generada o null si no hay nada que cobrar.
+     */
+    public function syncAddonCharges(Service $service, ?PaymentGateway $gateway = null): ?PaymentOrder
+    {
+        $hasOpenServiceOrder = PaymentOrder::where('service_id', $service->id)
+            ->where('kind', PaymentOrder::KIND_SERVICE)
+            ->where('status', PaymentOrderStatus::Pending->value)
+            ->exists();
+
+        if ($hasOpenServiceOrder) {
+            return $this->createForService($service->refresh(), $gateway);
+        }
+
+        return $this->createForAddons($service->refresh(), $gateway);
+    }
+
+    /**
+     * Orden de pago solo con los complementos activos aún no pagados del
+     * pedido, cada uno con su IVA. Reemplaza la orden de complementos
+     * pendiente anterior. Si no hay complementos por cobrar, solo cancela la
+     * anterior y devuelve null.
+     */
+    public function createForAddons(Service $service, ?PaymentGateway $gateway = null): ?PaymentOrder
+    {
+        $service->load('addons');
+
+        PaymentOrder::where('service_id', $service->id)
+            ->where('kind', PaymentOrder::KIND_ADDONS)
+            ->where('status', PaymentOrderStatus::Pending->value)
+            ->update(['status' => PaymentOrderStatus::Cancelled->value]);
+
+        $serviceRate = (float) ($service->tax_rate ?? 0);
+        $addons = $service->addons
+            ->filter(fn ($a) => $a->status === AddonStatus::Active && ! $a->isPaid())
+            ->values();
+
+        if ($addons->isEmpty()) {
+            return null;
+        }
+
+        $breakdown = app(PricingService::class)->computeLines(
+            $addons->map(fn ($a) => ['cents' => (int) $a->price_cents, 'rate' => $a->effectiveTaxRate($serviceRate)])->all(),
+        );
+
+        $folio = $this->generateFolio();
+        $currency = $service->currency ?? 'MXN';
+        $totalCents = $breakdown['total_cents'];
+        $concept = 'Complementos: '.$addons->pluck('name')->implode(', ');
+        $rates = $addons->map(fn ($a) => $a->effectiveTaxRate($serviceRate))->unique()->values();
+
+        $checkout = ['external_reference' => $folio, 'preference_id' => null, 'checkout_url' => null];
+        if ($totalCents > 0 && $gateway !== null && $this->canCharge($gateway)) {
+            $checkout = $this->requestCheckout($folio, $totalCents, $currency, $concept, $service->id, $gateway);
+        }
+
+        return DB::transaction(function () use ($service, $addons, $breakdown, $folio, $currency, $totalCents, $concept, $rates, $checkout, $serviceRate): PaymentOrder {
+            $order = PaymentOrder::create([
+                'folio' => $folio,
+                'client_id' => $service->client_id,
+                'service_id' => $service->id,
+                'kind' => PaymentOrder::KIND_ADDONS,
+                'invoice_id' => null,
+                'amount_cents' => $totalCents,
+                'subtotal_cents' => $breakdown['subtotal_cents'],
+                'discount_cents' => 0,
+                'tax_cents' => $breakdown['tax_cents'],
+                // Con una sola tasa se guarda esa; con varias, la del pedido
+                // (el recibo muestra entonces solo "IVA").
+                'tax_rate' => $rates->count() === 1 ? (float) $rates->first() : $serviceRate,
+                'concept' => \Illuminate\Support\Str::limit($concept, 250, '…'),
+                'currency' => $currency,
+                'status' => PaymentOrderStatus::Pending->value,
+                'gateway' => 'mercadopago',
+                'external_reference' => $checkout['external_reference'],
+                'preference_id' => $checkout['preference_id'],
+                'checkout_url' => $checkout['checkout_url'],
+                'expires_at' => now()->addDays(self::EXPIRES_DAYS),
+                'paid_at' => null,
+            ]);
+
+            foreach ($addons as $addon) {
+                $order->items()->create([
+                    'addon_id' => $addon->id,
+                    'description' => 'Complemento: '.$addon->name,
+                    'quantity' => 1,
+                    'unit_price_cents' => (int) $addon->price_cents,
+                    'amount_cents' => (int) $addon->price_cents,
+                    'tax_rate' => $addon->effectiveTaxRate($serviceRate),
+                    'currency' => $currency,
+                ]);
+            }
+
+            return $order;
+        });
     }
 
     /**
@@ -167,8 +273,11 @@ class PaymentOrderService
 
             if (! $invoice && $order->service) {
                 // Se genera ahora (tras el pago) como registro pendiente de
-                // timbrar; se liga a la orden y se refresca la relación.
-                $invoice = $this->invoices->createFromService($order->service);
+                // timbrar; se liga a la orden y se refresca la relación. Una
+                // orden de complementos se factura con sus propias líneas.
+                $invoice = $order->isForAddons()
+                    ? $this->invoices->createFromPaymentOrder($order)
+                    : $this->invoices->createFromService($order->service);
                 $order->invoice_id = $invoice->id;
                 $order->setRelation('invoice', $invoice);
             }
@@ -178,6 +287,21 @@ class PaymentOrderService
                 'status' => PaymentOrderStatus::Paid->value,
                 'paid_at' => now(),
             ])->save();
+
+            // Los complementos cubiertos por la orden quedan pagados: desde
+            // ahora el cliente los ve en sus servicios.
+            $addonIds = $order->items()->whereNotNull('addon_id')->pluck('addon_id');
+            if ($addonIds->isNotEmpty()) {
+                \App\Domain\Services\Models\Addon::whereIn('id', $addonIds)
+                    ->whereNull('paid_at')
+                    ->update(['paid_at' => now()]);
+
+                // Un complemento de pago único ya pagado deja de contar en el
+                // total del pedido (no se vuelve a cobrar en la renovación).
+                if ($order->service) {
+                    app(PricingService::class)->recalculate($order->service->refresh()->load('addons'));
+                }
+            }
 
             if (! $invoice) {
                 return;

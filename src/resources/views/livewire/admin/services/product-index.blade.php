@@ -1,7 +1,7 @@
 <div>
     <div class="rounded-xl bg-white p-6 shadow-sm ring-1 ring-slate-900/5">
         <h1 class="text-lg font-semibold text-slate-900">Productos</h1>
-        <p class="mt-1 text-sm text-slate-500">Gestiona productos, prepara nuevas ofertas y organiza las categorías de producto.</p>
+        <p class="mt-1 text-sm text-slate-500">Gestiona productos, prepara nuevas ofertas y organízalos por categorías.</p>
 
         {{-- Pestañas --}}
         <div class="mt-4 flex gap-1 border-b border-slate-200">
@@ -13,10 +13,6 @@
                     class="border-b-2 px-4 py-2 text-sm font-medium {{ $tab === 'categories' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700' }}">
                 Categorías
             </button>
-            <button type="button" wire:click="setTab('types')"
-                    class="border-b-2 px-4 py-2 text-sm font-medium {{ $tab === 'types' ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-500 hover:text-slate-700' }}">
-                Tipos
-            </button>
         </div>
 
         @if (session('status'))
@@ -26,19 +22,20 @@
         {{-- ===================== Pestaña: Productos ===================== --}}
         @if ($tab === 'products')
             {{-- Tarjetas KPI por estado --}}
+            {{-- Las tarjetas filtran el listado por estado. --}}
             <div class="mt-5 grid gap-4 sm:grid-cols-3">
-                <div class="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-900/5">
-                    <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-green-50 text-lg font-semibold text-green-600">{{ $kpis['active'] }}</span>
-                    <span class="text-sm font-medium text-slate-600">Habilitados</span>
-                </div>
-                <div class="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-900/5">
-                    <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-slate-100 text-lg font-semibold text-slate-600">{{ $kpis['inactive'] }}</span>
-                    <span class="text-sm font-medium text-slate-600">Deshabilitados</span>
-                </div>
-                <div class="flex items-center gap-3 rounded-xl bg-white p-4 shadow-sm ring-1 ring-slate-900/5">
-                    <span class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-lg font-semibold text-blue-600">{{ $kpis['total'] }}</span>
-                    <span class="text-sm font-medium text-slate-600">Total</span>
-                </div>
+                @foreach ([
+                    ['key' => 'active', 'label' => 'Habilitados', 'count' => $kpis['active'], 'color' => 'bg-green-50 text-green-600'],
+                    ['key' => 'inactive', 'label' => 'Deshabilitados', 'count' => $kpis['inactive'], 'color' => 'bg-slate-100 text-slate-600'],
+                    ['key' => '', 'label' => 'Total', 'count' => $kpis['total'], 'color' => 'bg-blue-50 text-blue-600'],
+                ] as $card)
+                    <button type="button" wire:click="filterStatus('{{ $card['key'] }}')"
+                            aria-pressed="{{ $statusFilter === $card['key'] ? 'true' : 'false' }}"
+                            class="flex items-center gap-3 rounded-xl bg-white p-4 text-left shadow-sm ring-1 transition hover:ring-indigo-300 {{ $statusFilter === $card['key'] ? 'ring-2 ring-indigo-500' : 'ring-slate-900/5' }}">
+                        <span class="flex h-10 w-10 items-center justify-center rounded-lg text-lg font-semibold {{ $card['color'] }}">{{ $card['count'] }}</span>
+                        <span class="text-sm font-medium text-slate-600">{{ $card['label'] }}</span>
+                    </button>
+                @endforeach
             </div>
 
             {{-- Gráfica de distribución de productos por estado (barras) --}}
@@ -70,7 +67,7 @@
                     <thead class="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
                         <tr>
                             <th class="px-3 py-3">Número</th>
-                            <th class="px-3 py-3">Tipo</th>
+                            <th class="px-3 py-3">Funciona como</th>
                             <th class="px-3 py-3">Categoría</th>
                             <th class="px-3 py-3">Título</th>
                             <th class="px-3 py-3">Cobro</th>
@@ -123,6 +120,10 @@
                                 </td>
                                 <td class="px-3 py-3">
                                     <div class="flex items-center justify-end gap-1">
+                                        <button type="button" wire:click="toggleProduct({{ $product->id }})"
+                                                class="rounded-md px-2 py-1 text-xs font-medium {{ $product->is_active ? 'text-slate-600 hover:bg-slate-100' : 'text-green-700 hover:bg-green-50' }}">
+                                            {{ $product->is_active ? 'Deshabilitar' : 'Habilitar' }}
+                                        </button>
                                         @if ($product->isFromPlan())
                                             {{-- Producto espejo de un plan: se edita desde el plan. --}}
                                             <a href="{{ route('admin.plans.edit', $product->plan_id) }}" title="Editar el plan"
@@ -178,6 +179,7 @@
                         <tr>
                             <th class="px-3 py-3">#</th>
                             <th class="px-3 py-3">Título</th>
+                            <th class="px-3 py-3">Productos</th>
                             <th class="px-3 py-3 text-right"></th>
                         </tr>
                     </thead>
@@ -186,6 +188,7 @@
                             <tr wire:key="category-{{ $category->id }}" class="transition hover:bg-slate-50/70">
                                 <td class="px-3 py-3 text-slate-600">{{ $category->id }}</td>
                                 <td class="px-3 py-3 font-medium text-indigo-600">{{ $category->title }}</td>
+                                <td class="px-3 py-3 text-slate-600">{{ $category->products_count }}</td>
                                 <td class="px-3 py-3">
                                     <div class="flex items-center justify-end gap-1">
                                         <button type="button" wire:click="editCategory({{ $category->id }})" title="Editar"
@@ -201,7 +204,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="3" class="px-3 py-8 text-center text-slate-500">No hay categorías.</td>
+                                <td colspan="4" class="px-3 py-8 text-center text-slate-500">No hay categorías.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -209,62 +212,6 @@
             </div>
         @endif
 
-        {{-- ===================== Pestaña: Tipos ===================== --}}
-        @if ($tab === 'types')
-            <div class="mt-4 flex justify-end">
-                <button type="button" wire:click="openTypeModal"
-                        class="inline-flex items-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-                    <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>
-                    Nuevo tipo
-                </button>
-            </div>
-
-            <div class="mt-4 overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
-                        <tr>
-                            <th class="px-3 py-3">#</th>
-                            <th class="px-3 py-3">Tipo</th>
-                            <th class="px-3 py-3">Identificador</th>
-                            <th class="px-3 py-3">Estado</th>
-                            <th class="px-3 py-3 text-right"></th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        @forelse ($productTypes as $type)
-                            <tr wire:key="ptype-{{ $type->id }}" class="transition hover:bg-slate-50/70">
-                                <td class="px-3 py-3 text-slate-600">{{ $type->id }}</td>
-                                <td class="px-3 py-3 font-medium text-slate-900">{{ $type->label }}</td>
-                                <td class="px-3 py-3 text-slate-500">{{ $type->slug }}</td>
-                                <td class="px-3 py-3">
-                                    @if ($type->is_active)
-                                        <span class="rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-700">Activo</span>
-                                    @else
-                                        <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-500">Inactivo</span>
-                                    @endif
-                                </td>
-                                <td class="px-3 py-3">
-                                    <div class="flex items-center justify-end gap-1">
-                                        <button type="button" wire:click="editType({{ $type->id }})" title="Editar"
-                                                class="rounded-md p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-700">
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Z"/></svg>
-                                        </button>
-                                        <button type="button" wire:click="deleteType({{ $type->id }})" wire:confirm="¿Eliminar este tipo?" title="Eliminar"
-                                                class="rounded-md p-2 text-red-500 hover:bg-red-50 hover:text-red-700">
-                                            <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.35 9m-4.78 0L9.26 9m9.97-3.23c.34.05.68.1 1.02.16M18.16 5.79 17.05 19.67a2.25 2.25 0 0 1-2.24 2.08H8.08a2.25 2.25 0 0 1-2.24-2.08L4.77 5.79m14.46 0a48.11 48.11 0 0 0-3.48-.4"/></svg>
-                                        </button>
-                                    </div>
-                                </td>
-                            </tr>
-                        @empty
-                            <tr>
-                                <td colspan="5" class="px-3 py-8 text-center text-slate-500">No hay tipos.</td>
-                            </tr>
-                        @endforelse
-                    </tbody>
-                </table>
-            </div>
-        @endif
     </div>
 
     {{-- ===================== Modal: Producto ===================== --}}
@@ -277,12 +224,17 @@
                 </div>
                 <form wire:submit="saveProduct" class="space-y-4 px-5 py-4">
                     <div>
-                        <label class="block text-sm font-medium text-slate-700">Tipo</label>
-                        <select wire:model="productType" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                        <label for="product-works-as" class="block text-sm font-medium text-slate-700">Funciona como</label>
+                        <select id="product-works-as" wire:model="productType" class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
                             @foreach ($typeOptions as $value => $label)
                                 <option value="{{ $value }}">{{ $label }}</option>
                             @endforeach
                         </select>
+                        <p class="mt-1 text-xs text-slate-400">
+                            Define qué hace el sistema con el producto; para organizarlo usa la Categoría.
+                            Los planes de hosting se dan de alta en Sistema → Servidores / Planes y aparecen aquí solos.
+                            Para una extensión de dominio elige "Dominio" y usa la extensión como título (p. ej. .mx).
+                        </p>
                         @error('productType') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                     </div>
                     <div>
@@ -314,11 +266,19 @@
 
                     {{-- Pago único: un solo precio --}}
                     @if ($billingMode === 'one_time')
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700">Precio (MXN)</label>
-                            <input type="number" step="0.01" min="0" wire:model="oneTimePrice"
-                                   class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                            @error('oneTimePrice') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        <div class="grid grid-cols-2 gap-3">
+                            <div>
+                                <label for="product-one-time-price" class="block text-sm font-medium text-slate-700">Precio (MXN)</label>
+                                <input id="product-one-time-price" type="number" step="0.01" min="0" wire:model="oneTimePrice"
+                                       class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                @error('oneTimePrice') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                            </div>
+                            <div>
+                                <label for="product-one-time-tax" class="block text-sm font-medium text-slate-700">IVA (%)</label>
+                                <input id="product-one-time-tax" type="number" step="0.01" min="0" max="100" wire:model="oneTimeTaxRate"
+                                       class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                                @error('oneTimeTaxRate') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                            </div>
                         </div>
                     @else
                         {{-- Recurrente: precios por ciclo --}}
@@ -397,37 +357,6 @@
                                 class="rounded-md bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600">Cancelar</button>
                         <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
                             {{ $editingCategoryId ? 'Guardar' : 'Crear' }}
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    @endif
-
-    {{-- ===================== Modal: Tipo de producto ===================== --}}
-    @if ($showTypeModal)
-        <div class="fixed inset-0 z-40 flex items-center justify-center bg-slate-900/40 p-4">
-            <div class="w-full max-w-md rounded-xl bg-white shadow-xl">
-                <div class="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                    <h2 class="font-semibold text-slate-900">{{ $editingTypeId ? 'Editar tipo' : 'Nuevo tipo de producto' }}</h2>
-                    <button type="button" wire:click="$set('showTypeModal', false)" class="text-slate-400 hover:text-slate-600">&times;</button>
-                </div>
-                <form wire:submit="saveType" class="space-y-4 px-5 py-4">
-                    <div>
-                        <label class="block text-sm font-medium text-slate-700">Nombre del tipo</label>
-                        <input type="text" wire:model="typeLabel" placeholder="Plugin, SSL, Addon..."
-                               class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
-                        @error('typeLabel') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                    </div>
-                    <label class="flex items-center gap-2 text-sm text-slate-700">
-                        <input type="checkbox" wire:model="typeActive" class="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500">
-                        Activo (disponible para asignar a productos)
-                    </label>
-                    <div class="flex items-center justify-end gap-2 border-t border-slate-100 pt-4">
-                        <button type="button" wire:click="$set('showTypeModal', false)"
-                                class="rounded-md bg-slate-500 px-4 py-2 text-sm font-medium text-white hover:bg-slate-600">Cancelar</button>
-                        <button type="submit" class="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
-                            {{ $editingTypeId ? 'Guardar' : 'Crear' }}
                         </button>
                     </div>
                 </form>

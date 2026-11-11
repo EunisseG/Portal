@@ -101,9 +101,8 @@
                 @endif
 
                 <div>
-                    <label class="block text-sm font-medium text-slate-700">Mensaje</label>
-                    <textarea wire:model="body" rows="6"
-                              class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500"></textarea>
+                    <p class="block text-sm font-medium text-slate-700">Mensaje</p>
+                    <x-rich-editor model="body" class="mt-1" label="Mensaje" />
                     @error('body') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                 </div>
             </div>

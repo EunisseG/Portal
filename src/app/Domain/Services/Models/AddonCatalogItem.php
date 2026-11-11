@@ -22,6 +22,7 @@ class AddonCatalogItem extends Model
         'description',
         'billing_mode',
         'price_cents',
+        'tax_rate',
         'currency',
         'is_active',
     ];
@@ -34,7 +35,39 @@ class AddonCatalogItem extends Model
         return [
             'billing_mode' => BillingMode::class,
             'price_cents' => 'integer',
+            // IVA del pago único (los recurrentes lo llevan por ciclo).
+            'tax_rate' => 'decimal:2',
             'is_active' => 'boolean',
+        ];
+    }
+
+    /**
+     * Precio (centavos), IVA y ciclo del complemento para un ciclo dado: el del
+     * ciclo si es recurrente (o el primero disponible), o el precio plano con
+     * su IVA si es de pago único.
+     *
+     * @return array{cents:int, tax_rate:float, cycle:?\App\Domain\Services\Enums\BillingCycle}
+     */
+    public function pricingFor(?string $cycleValue): array
+    {
+        if ($this->isRecurring()) {
+            $this->loadMissing('prices');
+            $price = $this->prices->first(fn ($p) => $p->billing_cycle->value === $cycleValue)
+                ?? $this->prices->first();
+
+            if ($price) {
+                return [
+                    'cents' => (int) $price->unit_price_cents,
+                    'tax_rate' => (float) $price->tax_rate,
+                    'cycle' => $price->billing_cycle,
+                ];
+            }
+        }
+
+        return [
+            'cents' => (int) $this->price_cents,
+            'tax_rate' => (float) ($this->tax_rate ?? 16),
+            'cycle' => null,
         ];
     }
 

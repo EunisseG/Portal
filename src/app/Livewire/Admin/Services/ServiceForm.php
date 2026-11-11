@@ -9,8 +9,10 @@ use App\Domain\Services\Enums\ServiceStatus;
 use App\Domain\Services\Enums\ServiceType;
 use App\Domain\Services\Enums\AddonStatus;
 use App\Domain\Services\Models\Addon;
+use App\Domain\Services\Models\AddonCatalogItem;
 use App\Domain\Services\Models\Domain;
 use App\Domain\Services\Models\Plan;
+use App\Domain\Services\Models\Product;
 use App\Domain\Services\Models\Server;
 use App\Domain\Services\Models\Service;
 use App\Domain\Billing\Services\PaymentOrderService;
@@ -36,6 +38,26 @@ class ServiceForm extends Component
     public ?int $sales_rep_id = null;
     public string $server_id = '';
     public string $plan_id = '';
+
+    /** Categoría de productos elegida: id, 'none' (sin categoría) o ''. */
+    public string $category_id = '';
+
+    /**
+     * Producto del catálogo del pedido: id, 'manual' (captura libre) o ''.
+     * Con producto, el nombre, tipo, plan, ciclos, precio e IVA salen de él.
+     */
+    public string $product_id = '';
+
+    /**
+     * Complementos del catálogo a agregar al pedido: [catalog_item_id => bool].
+     *
+     * @var array<int|string, bool>
+     */
+    public array $selectedAddons = [];
+
+    /** Extensión del dominio nuevo: id de un producto tipo "Dominio" o ''. */
+    public string $domainTldId = '';
+
     public string $type = ServiceType::Hosting->value;
     public string $name = '';
     public string $status = ServiceStatus::Active->value;
@@ -87,6 +109,21 @@ class ServiceForm extends Component
             $this->expires_at = $service->expires_at?->toDateString() ?? '';
             $this->expiresManuallySet = $service->expires_at !== null;
             $this->notes = (string) $service->notes;
+
+            // Producto de origen; los pedidos anteriores sin producto se editan
+            // en modo de captura manual.
+            $product = $service->product_id ? Product::find($service->product_id) : null;
+            if ($product) {
+                $this->product_id = (string) $product->id;
+                $this->category_id = $product->category_id ? (string) $product->category_id : 'none';
+            } else {
+                $this->product_id = 'manual';
+            }
+
+            // Complementos del catálogo que ya tiene el pedido.
+            foreach ($service->addons()->whereNotNull('catalog_item_id')->where('is_domain', false)->pluck('catalog_item_id') as $id) {
+                $this->selectedAddons[$id] = true;
+            }
         } else {
             Gate::authorize('create', Service::class);
 
@@ -108,7 +145,92 @@ class ServiceForm extends Component
     public function updatedType(): void
     {
         $this->plan_id = '';
+        $this->resetTypeDependentFields();
+    }
 
+    /** Al cambiar de categoría se vuelve a elegir el producto. */
+    public function updatedCategoryId(): void
+    {
+        $this->product_id = '';
+    }
+
+    /**
+     * Al elegir un producto se toman de él el nombre, tipo, plan, ciclos,
+     * precio e IVA (siguen siendo editables).
+     */
+    public function updatedProductId(): void
+    {
+        $product = $this->selectedProduct();
+
+        if (! $product) {
+            // Captura manual: el plan ya no aplica.
+            $this->plan_id = '';
+
+            return;
+        }
+
+        $previousType = $this->type;
+        $this->name = $product->name;
+        $this->type = $product->serviceType()->value;
+        $this->plan_id = (string) ($product->plan_id ?? '');
+
+        if ($previousType !== $this->type) {
+            $this->resetTypeDependentFields();
+        }
+
+        // Recurrente: si el ciclo actual no existe en el producto, usa el primero.
+        if ($product->isRecurring() && $product->prices->isNotEmpty()
+            && ! $product->prices->contains(fn ($p) => $p->billing_cycle->value === $this->billing_cycle)) {
+            $this->billing_cycle = $product->prices->first()->billing_cycle->value;
+        }
+
+        $this->applyProductPricing();
+        $this->recalculateExpiry();
+    }
+
+    /** Producto del catálogo elegido (con precios), o null en captura manual. */
+    public function selectedProduct(): ?Product
+    {
+        if ($this->product_id === '' || ! ctype_digit($this->product_id)) {
+            return null;
+        }
+
+        return Product::with('prices')->find((int) $this->product_id);
+    }
+
+    /** Copia precio e IVA del producto para el ciclo actual. */
+    private function applyProductPricing(): void
+    {
+        $product = $this->selectedProduct();
+        if (! $product) {
+            return;
+        }
+
+        $pricing = $product->pricingFor($this->billing_cycle);
+        $this->unit_price = number_format($pricing['unit_cents'] / 100, 2, '.', '');
+        $this->tax_rate = (string) $pricing['tax_rate'];
+    }
+
+    /** Precio (centavos) y ciclo de un complemento del catálogo para el ciclo del pedido. */
+    private function addonPricing(AddonCatalogItem $item): array
+    {
+        return $item->pricingFor($this->billing_cycle);
+    }
+
+    /** Complementos del catálogo marcados (activos). */
+    private function chosenAddons(): \Illuminate\Support\Collection
+    {
+        $ids = array_map('intval', array_keys(array_filter($this->selectedAddons)));
+        if ($ids === []) {
+            return collect();
+        }
+
+        return AddonCatalogItem::with('prices')->where('is_active', true)->whereIn('id', $ids)->orderBy('name')->get();
+    }
+
+    /** Limpia servidor y dominio cuando el tipo deja de ser hosting. */
+    private function resetTypeDependentFields(): void
+    {
         if ($this->type !== ServiceType::Hosting->value) {
             $this->server_id = '';
             // El bloque de dominio solo aplica a hosting: se restablece.
@@ -118,6 +240,7 @@ class ServiceForm extends Component
             $this->domainOrigin = 'owned';
             $this->domainIsPremium = false;
             $this->domainPrice = '';
+            $this->domainTldId = '';
         }
     }
 
@@ -135,7 +258,12 @@ class ServiceForm extends Component
             return true;
         }
 
-        return ! $this->hasFreeTld($this->domainName);
+        // Extensión del catálogo: se cobra si su precio es mayor a cero.
+        if ($product = $this->domainProduct()) {
+            return $this->domainProductCents($product) > 0;
+        }
+
+        return ! $this->hasFreeTld($this->fullDomainName());
     }
 
     /** ¿El dominio nuevo (comprado) es gratuito? (.com/.com.mx no premium) */
@@ -146,10 +274,78 @@ class ServiceForm extends Component
             && ! $this->domainIsChargeable();
     }
 
+    /**
+     * ¿El precio del dominio se captura a mano? Solo si se cobra y no sale del
+     * catálogo (premium o una extensión que no está dada de alta).
+     */
+    public function domainPriceIsManual(): bool
+    {
+        return $this->domainIsChargeable() && ($this->domainIsPremium || $this->domainProduct() === null);
+    }
+
     /** Costo del dominio (decimal, en pesos) que se suma al total. */
     public function domainCost(): float
     {
-        return $this->domainIsChargeable() ? (float) ($this->domainPrice ?: 0) : 0.0;
+        if (! $this->domainIsChargeable()) {
+            return 0.0;
+        }
+
+        if (! $this->domainPriceIsManual() && ($product = $this->domainProduct())) {
+            return $this->domainProductCents($product) / 100;
+        }
+
+        return (float) ($this->domainPrice ?: 0);
+    }
+
+    /** Producto de la extensión elegida (tipo "Dominio"), si hay. */
+    public function domainProduct(): ?Product
+    {
+        if ($this->domainTldId === '' || ! ctype_digit($this->domainTldId)) {
+            return null;
+        }
+
+        return Product::with('prices')
+            ->where('type', Product::TYPE_DOMAIN)
+            ->find((int) $this->domainTldId);
+    }
+
+    /**
+     * IVA del dominio: el de la extensión del catálogo cuando su precio sale de
+     * Productos; null (= el del pedido) si el precio se captura a mano.
+     */
+    public function domainTaxRate(): ?float
+    {
+        $product = $this->domainProduct();
+
+        if (! $product || $this->domainPriceIsManual()) {
+            return null;
+        }
+
+        return $product->pricingFor(BillingCycle::Annual->value)['tax_rate'];
+    }
+
+    /** Precio (centavos) de una extensión: el anual si es recurrente, si no el plano. */
+    private function domainProductCents(Product $product): int
+    {
+        return $product->pricingFor(BillingCycle::Annual->value)['unit_cents'];
+    }
+
+    /**
+     * Nombre completo del dominio nuevo: lo escrito más la extensión elegida
+     * (sin duplicarla si ya se escribió con ella).
+     */
+    public function fullDomainName(): string
+    {
+        $name = strtolower(trim($this->domainName));
+        $product = $this->domainProduct();
+
+        if ($name === '' || ! $product) {
+            return $name;
+        }
+
+        $tld = $product->tld();
+
+        return str_ends_with($name, $tld) ? $name : rtrim($name, '.').$tld;
     }
 
     /** Regla compartida con el pedido del cliente (ProductOrderService). */
@@ -212,7 +408,11 @@ class ServiceForm extends Component
 
     public function updatedBillingCycle(): void
     {
-        $this->applyPlanPricing();
+        if ($this->selectedProduct()) {
+            $this->applyProductPricing();
+        } else {
+            $this->applyPlanPricing();
+        }
         $this->recalculateExpiry();
     }
 
@@ -286,6 +486,7 @@ class ServiceForm extends Component
             'status' => ['required', new Enum(ServiceStatus::class)],
             'billing_cycle' => ['required', new Enum(BillingCycle::class)],
             'unit_price' => ['required', 'numeric', 'min:0'],
+            'category_id' => ['nullable', 'string'],
             'tax_rate' => ['required', 'numeric', 'min:0'],
             'starts_at' => ['nullable', 'date'],
             'expires_at' => ['nullable', 'date'],
@@ -297,7 +498,25 @@ class ServiceForm extends Component
             'domainOrigin' => ['nullable', 'in:owned,purchase'],
             'domainIsPremium' => ['boolean'],
             // El precio es obligatorio solo cuando el dominio nuevo se cobra.
-            'domainPrice' => [$this->domainIsChargeable() ? 'required' : 'nullable', 'numeric', 'min:0'],
+            'domainPrice' => [$this->domainPriceIsManual() ? 'required' : 'nullable', 'numeric', 'min:0'],
+            'domainTldId' => ['nullable', Rule::exists('products', 'id')->where('type', Product::TYPE_DOMAIN)],
+            // Producto del catálogo (o captura manual).
+            'product_id' => ['nullable', function (string $attribute, mixed $value, \Closure $fail) {
+                if ($value !== '' && $value !== 'manual' && ! Product::whereKey($value)->exists()) {
+                    $fail('El producto elegido no existe.');
+                }
+            }],
+            'selectedAddons' => ['array'],
+        ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    protected function messages(): array
+    {
+        return [
+            'name.required' => 'Elige el producto (Nombre del servicio) o escribe el nombre en captura manual.',
         ];
     }
 
@@ -355,13 +574,26 @@ class ServiceForm extends Component
             'total' => $this->withTax($unit),
         ];
 
+        // Cada complemento con su propio IVA.
+        foreach ($this->chosenAddons() as $item) {
+            $pricing = $this->addonPricing($item);
+            $amount = $pricing['cents'] / 100;
+            $tax = $amount * $pricing['tax_rate'] / 100;
+            $rows[] = [
+                'label' => 'Complemento: '.$item->name.' (IVA '.rtrim(rtrim(number_format($pricing['tax_rate'], 2, '.', ''), '0'), '.').'%)',
+                'base' => $amount,
+                'tax' => $tax,
+                'total' => $amount + $tax,
+            ];
+        }
+
         $domain = $this->domainCost();
         if ($domain > 0) {
             $rows[] = [
-                'label' => 'Dominio'.($this->domainName !== '' ? ' ('.$this->domainName.')' : ''),
+                'label' => 'Dominio'.($this->fullDomainName() !== '' ? ' ('.$this->fullDomainName().')' : ''),
                 'base' => $domain,
-                'tax' => $domain * $this->taxRateValue() / 100,
-                'total' => $this->withTax($domain),
+                'tax' => $domain * ($this->domainTaxRate() ?? $this->taxRateValue()) / 100,
+                'total' => $domain + $domain * ($this->domainTaxRate() ?? $this->taxRateValue()) / 100,
             ];
         }
 
@@ -399,6 +631,7 @@ class ServiceForm extends Component
             'sales_rep_id' => $data['sales_rep_id'] ?: null,
             'server_id' => $data['server_id'] ?: null,
             'plan_id' => $data['plan_id'] ?: null,
+            'product_id' => $this->selectedProduct()?->id,
             'type' => $data['type'],
             'name' => $data['name'],
             'status' => $data['status'],
@@ -415,6 +648,7 @@ class ServiceForm extends Component
             $services->update($this->service, $payload);
             $this->linkDomain($this->service, $data);
             $this->syncDomainCharge($this->service, $data);
+            $this->syncCatalogAddons($this->service->refresh());
             // Recalcula el desglose respetando complementos y promoción actuales.
             $service = $this->service->refresh()->load('addons');
             $pricing->recalculate($service);
@@ -425,6 +659,7 @@ class ServiceForm extends Component
             $service = $services->create($payload);
             $this->linkDomain($service, $data);
             $this->syncDomainCharge($service, $data);
+            $this->syncCatalogAddons($service->refresh());
             $pricing->recalculate($service->refresh()->load('addons'));
             // Al crear el pedido se genera su orden de pago.
             $this->generatePaymentOrder($service->refresh());
@@ -479,7 +714,7 @@ class ServiceForm extends Component
             Domain::create([
                 'client_id' => $service->client_id,
                 'service_id' => $service->id,
-                'name' => $data['domainName'],
+                'name' => $this->fullDomainName(),
                 'status' => DomainStatus::Pending->value,
                 'auto_renew' => false,
                 'notes' => $note,
@@ -511,7 +746,7 @@ class ServiceForm extends Component
             return;
         }
 
-        $label = 'Dominio'.(! empty($data['domainName']) ? ' ('.$data['domainName'].')' : '');
+        $label = 'Dominio'.($this->fullDomainName() !== '' ? ' ('.$this->fullDomainName().')' : '');
         $priceCents = Money::fromDecimal((string) $this->domainCost())->amountInCents;
 
         $payload = [
@@ -520,6 +755,8 @@ class ServiceForm extends Component
             'name' => $label,
             'status' => AddonStatus::Active->value,
             'price_cents' => $priceCents,
+            // IVA de la extensión (Productos) o, si se capturó a mano, el del pedido.
+            'tax_rate' => $this->domainTaxRate(),
             'currency' => Money::DEFAULT_CURRENCY,
         ];
 
@@ -527,6 +764,50 @@ class ServiceForm extends Component
             $existing->update($payload);
         } else {
             Addon::create($payload);
+        }
+    }
+
+    /**
+     * Agrega al pedido los complementos del catálogo marcados y quita los que
+     * se desmarcaron. Los que ya estaban se dejan tal cual (conservan el
+     * precio con el que se agregaron).
+     */
+    private function syncCatalogAddons(Service $service): void
+    {
+        $chosen = $this->chosenAddons();
+        $chosenIds = $chosen->pluck('id')->all();
+
+        $existing = Addon::where('service_id', $service->id)
+            ->where('is_domain', false)
+            ->whereNotNull('catalog_item_id')
+            ->get();
+
+        foreach ($existing as $addon) {
+            if (! in_array($addon->catalog_item_id, $chosenIds, true)) {
+                $addon->delete();
+            }
+        }
+
+        foreach ($chosen as $item) {
+            if ($existing->contains('catalog_item_id', $item->id)) {
+                continue;
+            }
+
+            $pricing = $this->addonPricing($item);
+
+            Addon::create([
+                'service_id' => $service->id,
+                'catalog_item_id' => $item->id,
+                'is_domain' => false,
+                'name' => $item->name,
+                'status' => AddonStatus::Active->value,
+                'price_cents' => $pricing['cents'],
+                'tax_rate' => $pricing['tax_rate'],
+                'billing_cycle' => $pricing['cycle']?->value,
+                'currency' => Money::DEFAULT_CURRENCY,
+                // Un complemento recurrente vence junto con el pedido.
+                'expires_at' => $pricing['cycle'] ? $service->expires_at : null,
+            ]);
         }
     }
 
@@ -539,9 +820,49 @@ class ServiceForm extends Component
             ->orderBy('name')
             ->get();
 
+        // Catálogo de productos que se pueden pedir (sin las extensiones de
+        // dominio, que se eligen en el apartado de dominio). Al editar se
+        // incluye el producto actual aunque esté deshabilitado.
+        $orderable = Product::with(['prices', 'category'])
+            ->where(fn ($q) => $q->where('is_active', true)
+                ->when(ctype_digit($this->product_id), fn ($qq) => $qq->orWhere('id', (int) $this->product_id)))
+            ->where(fn ($q) => $q->whereNull('type')->orWhere('type', '!=', Product::TYPE_DOMAIN))
+            ->orderBy('priority')
+            ->orderBy('name')
+            ->get();
+
+        $categoryOptions = $orderable->pluck('category')->filter()->unique('id')
+            ->sortBy('title')->mapWithKeys(fn ($c) => [(string) $c->id => $c->title])->all();
+        if ($orderable->contains(fn ($p) => $p->category_id === null)) {
+            $categoryOptions['none'] = 'Sin categoría';
+        }
+
+        $categoryProducts = $this->category_id === ''
+            ? collect()
+            : $orderable->filter(fn ($p) => $this->category_id === 'none'
+                ? $p->category_id === null
+                : (string) $p->category_id === $this->category_id)->values();
+
+        $selectedProduct = $this->selectedProduct();
+
+        // Extensiones de dominio dadas de alta en Productos (tipo "Dominio").
+        $domainExtensions = Product::with('prices')
+            ->where('type', Product::TYPE_DOMAIN)
+            ->where('is_active', true)
+            ->orderBy('priority')
+            ->orderBy('name')
+            ->get();
+
+        $catalogAddons = AddonCatalogItem::with('prices')->where('is_active', true)->orderBy('name')->get();
+
         // Ciclos disponibles del plan elegido (si hay), para el selector de ciclo.
         $planCycles = [];
-        if ($this->plan_id !== '') {
+        if ($selectedProduct && $selectedProduct->isRecurring() && $selectedProduct->prices->isNotEmpty()) {
+            // Con producto, los ciclos son los que tiene dados de alta.
+            $planCycles = $selectedProduct->prices
+                ->mapWithKeys(fn ($p) => [$p->billing_cycle->value => $p->billing_cycle->label()])
+                ->all();
+        } elseif ($this->plan_id !== '') {
             $plan = $plans->firstWhere('id', (int) $this->plan_id);
             if ($plan) {
                 $planCycles = $plan->prices
@@ -586,6 +907,13 @@ class ServiceForm extends Component
             'clientDomains' => $clientDomains,
             'showsNameField' => $this->showsNameField(),
             'typeOptions' => ServiceType::options(),
+            'categoryOptions' => $categoryOptions,
+            'categoryProducts' => $categoryProducts,
+            'selectedProduct' => $selectedProduct,
+            'isManual' => $selectedProduct === null && ($this->product_id === 'manual' || $orderable->isEmpty()),
+            'domainExtensions' => $domainExtensions,
+            'catalogAddons' => $catalogAddons,
+            'addonPrices' => $catalogAddons->mapWithKeys(fn ($item) => [$item->id => $this->addonPricing($item)['cents'] / 100])->all(),
             'statusOptions' => ServiceStatus::options(),
             'cycleOptions' => BillingCycle::options(),
         ])->layout('layouts.app', ['area' => 'admin']);

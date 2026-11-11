@@ -38,7 +38,7 @@ class SurveyFormIndex extends Component
 
     public function mount(): void
     {
-        Gate::authorize('sla.manage');
+        Gate::authorize('surveys.manage');
         $this->loadForm();
     }
 
@@ -64,7 +64,7 @@ class SurveyFormIndex extends Component
     /** Guarda el título e instrucciones del formulario del tipo activo. */
     public function saveForm(): void
     {
-        Gate::authorize('sla.manage');
+        Gate::authorize('surveys.manage');
 
         $data = $this->validate([
             'title' => ['required', 'string', 'max:255'],
@@ -93,7 +93,7 @@ class SurveyFormIndex extends Component
 
     public function editQuestion(int $id): void
     {
-        Gate::authorize('sla.manage');
+        Gate::authorize('surveys.manage');
 
         $question = $this->questionForCurrentForm($id);
         $this->editingQuestionId = $question->id;
@@ -116,7 +116,7 @@ class SurveyFormIndex extends Component
 
     public function saveQuestion(): void
     {
-        Gate::authorize('sla.manage');
+        Gate::authorize('surveys.manage');
 
         $data = $this->validate([
             'q_label' => ['required', 'string', 'max:255'],
@@ -153,7 +153,7 @@ class SurveyFormIndex extends Component
 
     public function deleteQuestion(int $id): void
     {
-        Gate::authorize('sla.manage');
+        Gate::authorize('surveys.manage');
 
         $this->questionForCurrentForm($id)->delete();
         session()->flash('status', 'Pregunta eliminada.');
@@ -162,7 +162,7 @@ class SurveyFormIndex extends Component
     /** Sube o baja una pregunta en el orden. */
     public function move(int $id, string $direction): void
     {
-        Gate::authorize('sla.manage');
+        Gate::authorize('surveys.manage');
 
         $questions = $this->currentForm()->questions()->get();
         $index = $questions->search(fn ($q) => $q->id === $id);

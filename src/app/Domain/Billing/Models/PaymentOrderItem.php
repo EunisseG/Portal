@@ -17,10 +17,12 @@ class PaymentOrderItem extends Model
      */
     protected $fillable = [
         'payment_order_id',
+        'addon_id',
         'description',
         'quantity',
         'unit_price_cents',
         'amount_cents',
+        'tax_rate',
         'currency',
     ];
 
@@ -33,7 +35,14 @@ class PaymentOrderItem extends Model
             'quantity' => 'integer',
             'unit_price_cents' => 'integer',
             'amount_cents' => 'integer',
+            'tax_rate' => 'decimal:2',
         ];
+    }
+
+    /** Complemento que cubre esta línea (si aplica). */
+    public function addon(): BelongsTo
+    {
+        return $this->belongsTo(\App\Domain\Services\Models\Addon::class);
     }
 
     public function paymentOrder(): BelongsTo

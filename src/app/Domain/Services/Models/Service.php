@@ -34,6 +34,7 @@ class Service extends Model
         'server_id',
         'whm_username',
         'plan_id',
+        'product_id',
         'promotion_id',
         'type',
         'name',
@@ -98,6 +99,12 @@ class Service extends Model
         return $this->belongsTo(Plan::class);
     }
 
+    /** Producto del catálogo del que salió el pedido (si aplica). */
+    public function product(): BelongsTo
+    {
+        return $this->belongsTo(Product::class);
+    }
+
     public function promotion(): BelongsTo
     {
         return $this->belongsTo(Promotion::class);
@@ -126,10 +133,31 @@ class Service extends Model
      */
     public function isLockedByPayment(): bool
     {
-        $latest = $this->paymentOrders()->latest('id')->first();
+        // Solo cuentan las órdenes del pedido completo: una orden de
+        // complementos no desbloquea la edición de un pedido ya pagado.
+        $latest = $this->paymentOrders()
+            ->where('kind', \App\Domain\Billing\Models\PaymentOrder::KIND_SERVICE)
+            ->latest('id')
+            ->first();
 
         return $latest !== null
             && $latest->status === \App\Domain\Billing\Enums\PaymentOrderStatus::Paid;
+    }
+
+    /**
+     * Complementos que se cobran con el pedido: los activos, salvo los de
+     * pago único que ya se pagaron (no se vuelven a cobrar en la renovación).
+     *
+     * @return \Illuminate\Support\Collection<int, Addon>
+     */
+    public function billableAddons(): \Illuminate\Support\Collection
+    {
+        $addons = $this->relationLoaded('addons') ? $this->addons : $this->addons()->get();
+
+        return $addons
+            ->filter(fn (Addon $addon) => $addon->status === \App\Domain\Services\Enums\AddonStatus::Active
+                && ! ($addon->isPaid() && ! $addon->isRecurring()))
+            ->values();
     }
 
     public function domains(): HasMany

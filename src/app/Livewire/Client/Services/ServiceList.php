@@ -125,7 +125,9 @@ class ServiceList extends Component
 
         /** @var Collection<int, Service> $services */
         $services = ($client && $canServices)
-            ? Service::with(['addons', 'server'])
+            // El cliente solo ve los complementos ya pagados (se agregan desde
+            // el admin y aparecen al pagar su orden).
+            ? Service::with(['addons' => fn ($q) => $q->whereNotNull('paid_at'), 'server'])
                 ->where('client_id', $client->id)
                 ->orderByDesc('id')
                 ->get()

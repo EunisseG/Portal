@@ -40,6 +40,11 @@ class RolesAndPermissionsSeeder extends Seeder
         'audit.view',
         'security.view', 'security.manage',
         'integrations.manage',
+        // Secciones con permiso propio.
+        'reports.view',
+        'currencies.manage',
+        'surveys.manage',
+        'settings.manage',
         // Permisos del portal de cliente, asignables a sub-usuarios de un cliente.
         'client.invoices.view', 'client.proofs.upload',
         'client.tickets.view', 'client.tickets.create',
@@ -94,6 +99,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'addons.manage',
             'kb.view',
             'invoices.view',
+            'reports.view',
             'payment_proofs.manage',
         ]);
 
@@ -105,6 +111,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'tickets.view', 'tickets.manage', 'tickets.reply',
             'internal_tickets.view', 'internal_tickets.manage', 'internal_tickets.reply',
             'sla.manage',
+            'surveys.manage',
             'news.view', 'news.manage',
             'kb.view', 'kb.manage',
         ]);
@@ -116,6 +123,7 @@ class RolesAndPermissionsSeeder extends Seeder
             'services.view',
             'invoices.view', 'invoices.manage',
             'payments.view', 'payments.record',
+            'reports.view',
         ]);
 
         // client: sin permisos administrativos. Su acceso al área /client se

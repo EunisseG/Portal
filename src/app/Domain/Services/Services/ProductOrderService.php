@@ -140,33 +140,25 @@ class ProductOrderService
 
         $cycle = BillingCycle::tryFrom($cycleValue) ?? BillingCycle::Monthly;
 
-        $unitCents = (int) $product->price_cents;
-        $taxRate = 0.0;
-        $billingCycle = BillingCycle::Monthly;
-        $months = 1;
-
-        if ($product->isRecurring()) {
-            // Usa el ciclo elegido si existe; si no, el primero disponible.
-            $price = $product->prices->firstWhere('billing_cycle', $cycle)
-                ?? $product->prices->first();
-
-            if ($price) {
-                $unitCents = (int) $price->unit_price_cents;
-                $taxRate = (float) $price->tax_rate;
-                $billingCycle = $price->billing_cycle;
-                $months = $price->billing_cycle->months();
-            }
-        }
+        // Recurrente: precio e IVA del ciclo elegido (o el primero disponible).
+        // Pago único: precio plano con el IVA del producto.
+        $pricing = $product->pricingFor($cycle->value);
+        $unitCents = $pricing['unit_cents'];
+        $taxRate = $pricing['tax_rate'];
+        $billingCycle = $pricing['cycle'] ?? BillingCycle::Monthly;
+        $months = $pricing['cycle']?->months() ?? 1;
 
         $taxCents = (int) round($unitCents * $taxRate / 100);
         $totalCents = $unitCents + $taxCents;
 
         // El tipo del servicio sale del tipo del producto (p. ej. «hosting»);
         // si el producto tiene un tipo personalizado se queda como «Otro».
-        $type = ServiceType::tryFrom((string) $product->type) ?? ServiceType::Other;
+        $type = $product->serviceType();
 
         $service = Service::create([
             'client_id' => $client->id,
+            'product_id' => $product->id,
+            'plan_id' => $product->plan_id,
             'type' => $type->value,
             'name' => $product->name,
             'status' => $status->value,

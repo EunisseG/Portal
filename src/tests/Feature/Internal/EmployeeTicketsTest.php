@@ -525,6 +525,49 @@ class EmployeeTicketsTest extends TestCase
         ]);
     }
 
+    public function test_employee_can_close_their_internal_ticket_from_detail(): void
+    {
+        $area = InternalArea::first();
+        $emp = $this->employee($area);
+
+        $ticket = Ticket::factory()->create([
+            'type' => TicketType::Internal->value,
+            'client_id' => null,
+            'opened_by_user_id' => $emp->id,
+            'internal_area_id' => $area->id,
+            'status' => \App\Domain\Tickets\Enums\TicketStatus::Open->value,
+            'subject' => 'Acceso a VPN',
+        ]);
+
+        Livewire::actingAs($emp)
+            ->test(\App\Livewire\Employee\Tickets\TicketShow::class, ['ticket' => $ticket])
+            ->assertSee('Acceso a VPN')
+            ->assertSee('Historial de conversación')
+            ->assertSee('Cerrar ticket')
+            ->call('close')
+            ->assertSee('Este ticket está cerrado.');
+
+        $this->assertSame(\App\Domain\Tickets\Enums\TicketStatus::Closed, $ticket->fresh()->status);
+        // El cierre genera la encuesta interna del empleado.
+        $this->assertDatabaseHas('satisfaction_surveys', ['ticket_id' => $ticket->id, 'user_id' => $emp->id]);
+    }
+
+    public function test_employee_cannot_close_another_employees_ticket(): void
+    {
+        $area = InternalArea::first();
+        $emp = $this->employee($area);
+        $other = $this->employee($area);
+
+        $ticket = Ticket::factory()->create([
+            'type' => TicketType::Internal->value,
+            'client_id' => null,
+            'opened_by_user_id' => $other->id,
+            'internal_area_id' => $area->id,
+        ]);
+
+        $this->assertFalse($emp->can('close', $ticket));
+    }
+
     public function test_satisfaction_stats_separate_client_and_internal(): void
     {
         $area = InternalArea::first();

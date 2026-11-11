@@ -54,49 +54,63 @@
             @error('client_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
         </div>
 
+        {{-- Categoría → producto del catálogo (planes de hosting incluidos). --}}
         <div class="grid gap-4 sm:grid-cols-2">
             <div>
-                <label class="block text-sm font-medium text-slate-700">Tipo</label>
-                <select wire:model.live="type"
+                <label for="order-category" class="block text-sm font-medium text-slate-700">Categoría</label>
+                <select id="order-category" wire:model.live="category_id"
                         class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
-                    @foreach ($typeOptions as $value => $label)
+                    <option value="">— Selecciona una categoría —</option>
+                    @foreach ($categoryOptions as $value => $label)
                         <option value="{{ $value }}">{{ $label }}</option>
                     @endforeach
                 </select>
-                @error('type') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                @error('category_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
             </div>
-            {{-- El plan solo se muestra si el tipo seleccionado tiene planes. --}}
-            @if ($hasPlans)
-                <div>
-                    <label class="block text-sm font-medium text-slate-700">Plan (opcional)</label>
-                    <select wire:model.live="plan_id"
-                            class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
-                        <option value="">Sin plan (manual)</option>
-                        @foreach ($plans as $plan)
-                            <option value="{{ $plan->id }}">{{ $plan->name }}</option>
-                        @endforeach
-                    </select>
-                    <p class="mt-1 text-xs text-slate-400">Se muestran solo los planes activos del tipo seleccionado.</p>
-                    @error('plan_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-                </div>
-            @endif
+            <div>
+                <label for="order-product" class="block text-sm font-medium text-slate-700">Nombre del servicio</label>
+                <select id="order-product" wire:model.live="product_id"
+                        class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                    <option value="">{{ $category_id === '' ? '— Elige primero la categoría —' : '— Selecciona un producto —' }}</option>
+                    @foreach ($categoryProducts as $product)
+                        <option value="{{ $product->id }}">{{ $product->name }}{{ $product->is_active ? '' : ' (deshabilitado)' }}</option>
+                    @endforeach
+                    <option value="manual">Otro (captura manual)</option>
+                </select>
+                @error('product_id') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+            </div>
         </div>
 
-        {{-- El nombre del servicio se toma del plan cuando hay uno; solo se
-             captura manualmente cuando no se eligió plan. --}}
-        @if ($showsNameField)
-            <div>
-                <label class="block text-sm font-medium text-slate-700">Nombre del servicio</label>
-                <input type="text" wire:model="name"
-                       class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
-                @error('name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
-            </div>
-        @else
+        @if ($selectedProduct)
             <div class="rounded-md bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                El nombre se toma del plan: <span class="font-medium text-slate-700">{{ $name ?: '—' }}</span>
+                Tipo: <span class="font-medium text-slate-700">{{ $selectedProduct->typeLabel() }}</span>
+                · Cobro: <span class="font-medium text-slate-700">{{ $selectedProduct->billing_mode?->label() }}</span>
+                @if ($selectedProduct->isFromPlan())
+                    · Plan: <span class="font-medium text-slate-700">{{ $selectedProduct->plan?->name }}</span>
+                @endif
+                <span class="block">El precio, el IVA y los ciclos se toman del producto. Puedes ajustarlos abajo.</span>
             </div>
-            @error('name') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+        @elseif ($isManual)
+            {{-- Captura manual (pedidos que no salen del catálogo). --}}
+            <div class="grid gap-4 sm:grid-cols-2">
+                <div>
+                    <label for="order-type" class="block text-sm font-medium text-slate-700">Tipo</label>
+                    <select id="order-type" wire:model.live="type"
+                            class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                        @foreach ($typeOptions as $value => $label)
+                            <option value="{{ $value }}">{{ $label }}</option>
+                        @endforeach
+                    </select>
+                    @error('type') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                </div>
+                <div>
+                    <label for="order-name" class="block text-sm font-medium text-slate-700">Nombre del servicio</label>
+                    <input id="order-name" type="text" wire:model="name"
+                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                </div>
+            </div>
         @endif
+        @error('name') <p class="-mt-3 text-sm text-red-600">{{ $message }}</p> @enderror
 
         {{-- Ejecutivo de ventas responsable de ESTE servicio. Un cliente puede
              tener varios servicios con ejecutivos distintos. --}}
@@ -181,13 +195,32 @@
                     </div>
                 @elseif ($domainMode === 'new')
                     <div class="mt-3 space-y-3">
-                        <div>
-                            <label class="block text-sm font-medium text-slate-700">Nuevo dominio</label>
-                            <input type="text" wire:model.live.debounce.400ms="domainName" placeholder="ejemplo.com"
-                                   class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
-                            <p class="mt-1 text-xs text-slate-400">Se creará como dominio del cliente ligado a este servicio.</p>
-                            @error('domainName') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                        <div class="grid gap-3 {{ $domainExtensions->isNotEmpty() ? 'sm:grid-cols-3' : '' }}">
+                            <div class="{{ $domainExtensions->isNotEmpty() ? 'sm:col-span-2' : '' }}">
+                                <label for="order-domain-name" class="block text-sm font-medium text-slate-700">Nuevo dominio</label>
+                                <input id="order-domain-name" type="text" wire:model.live.debounce.400ms="domainName"
+                                       placeholder="{{ $domainExtensions->isNotEmpty() ? 'ejemplo' : 'ejemplo.com' }}"
+                                       class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                                @error('domainName') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                            </div>
+                            {{-- Extensiones dadas de alta en Productos (tipo "Dominio"). --}}
+                            @if ($domainExtensions->isNotEmpty())
+                                <div>
+                                    <label for="order-domain-tld" class="block text-sm font-medium text-slate-700">Extensión</label>
+                                    <select id="order-domain-tld" wire:model.live="domainTldId"
+                                            class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                                        <option value="">Otra (escríbela en el nombre)</option>
+                                        @foreach ($domainExtensions as $ext)
+                                            <option value="{{ $ext->id }}">{{ $ext->tld() }}</option>
+                                        @endforeach
+                                    </select>
+                                    @error('domainTldId') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                                </div>
+                            @endif
                         </div>
+                        <p class="-mt-1 text-xs text-slate-400">
+                            Se creará como dominio del cliente ligado a este servicio{{ $this->fullDomainName() !== '' ? ': '.$this->fullDomainName() : '' }}.
+                        </p>
 
                         {{-- Origen del dominio: ya lo tiene el cliente o se compra con nosotros. --}}
                         <div>
@@ -213,23 +246,49 @@
                                 Dominio premium
                             </label>
 
-                            @if ($this->domainIsChargeable())
+                            @if ($this->domainPriceIsManual())
                                 <div>
-                                    <label class="block text-sm font-medium text-slate-700">Precio del dominio (MXN)</label>
-                                    <input type="number" step="0.01" min="0" wire:model.live="domainPrice"
+                                    <label for="order-domain-price" class="block text-sm font-medium text-slate-700">Precio del dominio (MXN)</label>
+                                    <input id="order-domain-price" type="number" step="0.01" min="0" wire:model.live="domainPrice"
                                            class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
                                     <p class="mt-1 text-xs text-slate-400">Se suma al total del pedido.</p>
                                     @error('domainPrice') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                                 </div>
+                            @elseif ($this->domainIsChargeable())
+                                <p class="rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                                    Precio de la extensión {{ $this->domainProduct()?->tld() }}:
+                                    <span class="font-medium">{{ number_format($this->domainCost(), 2) }} MXN</span> (según Productos). Se suma al total del pedido.
+                                </p>
                             @elseif ($this->domainIsFree())
                                 <p class="rounded-md bg-green-50 px-3 py-2 text-sm font-medium text-green-700">
-                                    Este dominio es gratis (extensión .com / .com.mx no premium).
+                                    Este dominio es gratis{{ $this->domainProduct() ? ' (extensión con precio 0 en Productos)' : ' (extensión .com / .com.mx no premium)' }}.
                                 </p>
                             @endif
                         @endif
                     </div>
                 @endif
             </div>
+        @endif
+
+        {{-- Complementos del catálogo (Productos → Complementos) --}}
+        @if ($catalogAddons->isNotEmpty())
+            <fieldset class="rounded-lg border border-slate-200 p-4">
+                <legend class="px-1 text-sm font-medium text-slate-700">Complementos (opcional)</legend>
+                <p class="text-xs text-slate-400">Marca los complementos que quieras agregar a este pedido. El precio recurrente es el del ciclo elegido.</p>
+                <div class="mt-3 space-y-2">
+                    @foreach ($catalogAddons as $addon)
+                        <label wire:key="order-addon-{{ $addon->id }}" class="flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-slate-50">
+                            <span class="inline-flex items-center gap-2 text-slate-700">
+                                <input type="checkbox" wire:model.live="selectedAddons.{{ $addon->id }}"
+                                       class="rounded border-slate-300 text-slate-800 focus:ring-slate-500">
+                                {{ $addon->name }}
+                                <span class="text-xs text-slate-400">{{ $addon->billing_mode?->label() }}</span>
+                            </span>
+                            <span class="text-slate-600">{{ number_format($addonPrices[$addon->id] ?? 0, 2) }} MXN</span>
+                        </label>
+                    @endforeach
+                </div>
+            </fieldset>
         @endif
 
         <div>
@@ -247,7 +306,7 @@
                 @endif
             </select>
             @if (! empty($planCycles))
-                <p class="mt-1 text-xs text-slate-400">Ciclos disponibles según el plan elegido.</p>
+                <p class="mt-1 text-xs text-slate-400">Ciclos disponibles según el producto elegido.</p>
             @endif
             @error('billing_cycle') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
         </div>
@@ -276,7 +335,7 @@
                     <tr>
                         <th class="py-1 text-left font-medium">Concepto</th>
                         <th class="py-1 text-right font-medium">Base</th>
-                        <th class="py-1 text-right font-medium">IVA ({{ (float) ($tax_rate ?: 0) }}%)</th>
+                        <th class="py-1 text-right font-medium">IVA</th>
                         <th class="py-1 text-right font-medium">Total</th>
                     </tr>
                 </thead>

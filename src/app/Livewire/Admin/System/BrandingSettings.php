@@ -43,7 +43,7 @@ class BrandingSettings extends Component
 
     public function mount(Branding $branding, CompanyProfile $company, EmailTemplate $email): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $this->name = $branding->name();
         $this->emailHtmlEnabled = $email->enabled();
@@ -61,7 +61,7 @@ class BrandingSettings extends Component
 
     public function save(Branding $branding): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $this->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -119,7 +119,7 @@ class BrandingSettings extends Component
     /** Elimina el logo actual (vuelve al nombre en texto). */
     public function removeLogo(Branding $branding): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $this->deleteFile($branding->logoPath());
         Setting::put(Branding::KEY_LOGO_PATH, null);
@@ -131,7 +131,7 @@ class BrandingSettings extends Component
     /** Elimina el favicon actual. */
     public function removeFavicon(Branding $branding): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $this->deleteFile($branding->faviconPath());
         Setting::put(Branding::KEY_FAVICON_PATH, null);

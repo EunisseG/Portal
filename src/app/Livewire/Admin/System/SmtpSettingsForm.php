@@ -37,7 +37,7 @@ class SmtpSettingsForm extends Component
 
     public function mount(SmtpSettings $settings): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $this->host = (string) $settings->host();
         $this->port = $settings->port();
@@ -66,7 +66,7 @@ class SmtpSettingsForm extends Component
 
     public function save(): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $data = $this->validate();
 
@@ -89,7 +89,7 @@ class SmtpSettingsForm extends Component
 
     public function sendTest(RecordIntegrationLog $log): void
     {
-        Gate::authorize('integrations.manage');
+        Gate::authorize('settings.manage');
 
         $this->validateOnly('testEmail', ['testEmail' => ['required', 'email']]);
 

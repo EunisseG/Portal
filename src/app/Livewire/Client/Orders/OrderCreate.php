@@ -72,6 +72,8 @@ class OrderCreate extends Component
 
         return Product::with('prices')
             ->where('is_active', true)
+            // Las extensiones de dominio no se piden como servicio suelto.
+            ->where(fn ($q) => $q->whereNull('type')->orWhere('type', '!=', Product::TYPE_DOMAIN))
             ->find($this->productId);
     }
 
@@ -188,6 +190,7 @@ class OrderCreate extends Component
     {
         $products = Product::with(['prices', 'category'])
             ->where('is_active', true)
+            ->where(fn ($q) => $q->whereNull('type')->orWhere('type', '!=', Product::TYPE_DOMAIN))
             ->orderBy('name')
             ->get();
 

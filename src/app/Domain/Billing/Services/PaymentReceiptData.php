@@ -57,6 +57,14 @@ class PaymentReceiptData
         // Tasa de IVA tal como se guardó en la orden (16, 8.5, 0…).
         $taxRatePercent = rtrim(rtrim(number_format((float) ($order->tax_rate ?? 0), 2, '.', ''), '0'), '.');
 
+        // Si los conceptos llevan tasas distintas (p. ej. un complemento con
+        // otro IVA), el total de IVA no corresponde a una sola tasa.
+        $lineRates = $order->items
+            ->filter(fn ($i) => ! $i->isDiscount() && $i->tax_rate !== null)
+            ->map(fn ($i) => (float) $i->tax_rate)
+            ->unique();
+        $taxLabel = $lineRates->count() > 1 ? 'IVA' : $taxRatePercent.'% IVA';
+
         $client = $order->client;
         $clientName = $client?->user?->name ?: ($client?->company ?: 'Cliente');
 
@@ -83,6 +91,7 @@ class PaymentReceiptData
             'discount' => new Money((int) $order->discount_cents, $currency),
             'tax' => new Money($taxCents, $currency),
             'taxRatePercent' => $taxRatePercent,
+            'taxLabel' => $taxLabel,
             'total' => new Money($totalCents, $currency),
         ];
     }

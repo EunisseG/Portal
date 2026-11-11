@@ -47,7 +47,7 @@ class InternalTicketShow extends Component
         Gate::authorize('reply', $this->ticket);
 
         $data = $this->validate([
-            'body' => ['required', 'string', 'max:5000'],
+            'body' => ['required', 'string', new \App\Rules\RichTextBody],
             'attachments' => ['array', 'max:5'],
             'attachments.*' => ['file', 'max:10240'],
         ]);

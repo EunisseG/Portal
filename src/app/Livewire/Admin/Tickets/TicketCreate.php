@@ -98,7 +98,7 @@ class TicketCreate extends Component
             'department' => ['required', new Enum(TicketDepartment::class)],
             'priority' => ['required', new Enum(TicketPriority::class)],
             'criticality' => ['required', new Enum(TicketCriticality::class)],
-            'body' => ['required', 'string', 'max:5000'],
+            'body' => ['required', 'string', new \App\Rules\RichTextBody],
         ], [
             'clientIds.required' => 'Selecciona al menos un cliente.',
             'clientIds.min' => 'Selecciona al menos un cliente.',

@@ -297,7 +297,8 @@ class TicketService
         $message = $ticket->messages()->create([
             'user_id' => $author->id,
             'is_staff' => $isStaff,
-            'body' => $body,
+            // El HTML del editor se sanitiza siempre antes de guardarse.
+            'body' => \App\Support\RichText::normalize($body),
         ]);
 
         foreach ($attachments as $file) {

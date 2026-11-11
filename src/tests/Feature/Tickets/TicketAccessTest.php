@@ -119,4 +119,89 @@ class TicketAccessTest extends TestCase
             ->assertDontSee('TICKET ABIERTO')
             ->assertDontSee('TICKET RESPONDIDO');
     }
+
+    // ===== Detalle del ticket (cliente) =====
+
+    public function test_client_ticket_detail_shows_header_and_conversation_history(): void
+    {
+        $me = $this->clientUser();
+        $ticket = Ticket::factory()->create([
+            'client_id' => $me->client->id,
+            'status' => TicketStatus::Open->value,
+            'subject' => 'Revisar SMTP',
+        ]);
+        TicketMessage::factory()->create(['ticket_id' => $ticket->id, 'user_id' => $me->id, 'body' => 'Primer mensaje']);
+        TicketMessage::factory()->create(['ticket_id' => $ticket->id, 'user_id' => $me->id, 'body' => 'Segundo mensaje']);
+
+        \Livewire\Livewire::actingAs($me)
+            ->test(\App\Livewire\Client\Tickets\TicketShow::class, ['ticket' => $ticket])
+            ->assertSee('#'.$ticket->number)
+            ->assertSee('Revisar SMTP')
+            ->assertSee('Cerrar ticket')
+            ->assertSee('Historial de conversación (2)')
+            // El más reciente aparece primero.
+            ->assertSeeInOrder(['Segundo mensaje', 'Primer mensaje']);
+    }
+
+    public function test_client_reply_with_formatting_is_stored_sanitized_and_rendered(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        $me = $this->clientUser();
+        $ticket = Ticket::factory()->create(['client_id' => $me->client->id, 'status' => TicketStatus::Open->value]);
+
+        \Livewire\Livewire::actingAs($me)
+            ->test(\App\Livewire\Client\Tickets\TicketShow::class, ['ticket' => $ticket])
+            ->set('body', '<p><strong>Importante</strong></p><script>alert(1)</script><p onclick="x()">fin</p>')
+            ->call('reply')
+            ->assertHasNoErrors()
+            ->assertSeeHtml('<strong>Importante</strong>')
+            ->assertDontSeeHtml('<script>alert(1)</script>');
+
+        $stored = TicketMessage::where('ticket_id', $ticket->id)->latest('id')->value('body');
+        $this->assertStringContainsString('<strong>Importante</strong>', $stored);
+        $this->assertStringNotContainsString('<script', $stored);
+        $this->assertStringNotContainsString('onclick', $stored);
+    }
+
+    public function test_client_cannot_send_an_empty_formatted_reply(): void
+    {
+        $me = $this->clientUser();
+        $ticket = Ticket::factory()->create(['client_id' => $me->client->id, 'status' => TicketStatus::Open->value]);
+
+        \Livewire\Livewire::actingAs($me)
+            ->test(\App\Livewire\Client\Tickets\TicketShow::class, ['ticket' => $ticket])
+            ->set('body', '<p><br></p>')
+            ->call('reply')
+            ->assertHasErrors('body');
+    }
+
+    public function test_client_can_close_their_own_ticket(): void
+    {
+        \Illuminate\Support\Facades\Queue::fake();
+        $me = $this->clientUser();
+        $ticket = Ticket::factory()->create(['client_id' => $me->client->id, 'status' => TicketStatus::Open->value]);
+
+        \Livewire\Livewire::actingAs($me)
+            ->test(\App\Livewire\Client\Tickets\TicketShow::class, ['ticket' => $ticket])
+            ->call('close')
+            ->assertHasNoErrors()
+            ->assertSee('Este ticket está cerrado.')
+            ->assertDontSee('Cerrar ticket');
+
+        $this->assertSame(TicketStatus::Closed, $ticket->fresh()->status);
+        $this->assertDatabaseHas('satisfaction_surveys', ['ticket_id' => $ticket->id]);
+    }
+
+    public function test_client_cannot_close_someone_elses_or_an_already_closed_ticket(): void
+    {
+        $me = $this->clientUser();
+        $other = $this->clientUser();
+
+        $foreign = Ticket::factory()->create(['client_id' => $other->client->id, 'status' => TicketStatus::Open->value]);
+        $closed = Ticket::factory()->create(['client_id' => $me->client->id, 'status' => TicketStatus::Closed->value]);
+
+        $this->assertFalse($me->can('close', $foreign));
+        $this->assertFalse($me->can('close', $closed));
+        $this->assertTrue($other->can('close', $foreign));
+    }
 }

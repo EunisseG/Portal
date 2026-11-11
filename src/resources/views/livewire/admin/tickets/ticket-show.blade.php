@@ -93,8 +93,7 @@
                 </div>
             @endif
             <div>
-                <textarea wire:model="body" rows="4" placeholder="Escribe tu respuesta..."
-                          class="block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500"></textarea>
+                <x-rich-editor model="body" label="Respuesta" placeholder="Escribe tu respuesta..." />
                 @error('body') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
             </div>
             <div>

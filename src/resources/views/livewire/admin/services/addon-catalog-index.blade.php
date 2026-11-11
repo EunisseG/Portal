@@ -58,11 +58,19 @@
 
                         {{-- Pago único: un solo precio --}}
                         @if ($billingMode === 'one_time')
-                            <div>
-                                <label class="block text-sm font-medium text-slate-700">Precio (MXN)</label>
-                                <input type="number" step="0.01" min="0" wire:model="oneTimePrice"
-                                       class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
-                                @error('oneTimePrice') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                            <div class="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label for="addon-one-time-price" class="block text-sm font-medium text-slate-700">Precio (MXN)</label>
+                                    <input id="addon-one-time-price" type="number" step="0.01" min="0" wire:model="oneTimePrice"
+                                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                                    @error('oneTimePrice') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                                </div>
+                                <div>
+                                    <label for="addon-one-time-tax" class="block text-sm font-medium text-slate-700">IVA (%)</label>
+                                    <input id="addon-one-time-tax" type="number" step="0.01" min="0" max="100" wire:model="oneTimeTaxRate"
+                                           class="mt-1 block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500">
+                                    @error('oneTimeTaxRate') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
+                                </div>
                             </div>
                         @else
                             {{-- Recurrente: precios por ciclo --}}
@@ -158,6 +166,7 @@
                                             </div>
                                         @else
                                             {{ $item->price()->format() }}
+                                            <span class="text-xs text-slate-500">+ IVA {{ (float) $item->tax_rate }}%</span>
                                         @endif
                                     </td>
                                     <td class="px-4 py-3">

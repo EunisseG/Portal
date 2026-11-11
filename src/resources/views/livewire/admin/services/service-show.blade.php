@@ -367,7 +367,7 @@
                                 @endforeach
                             </select>
                             @error('addonCycle') <p class="mt-1 text-xs text-red-600">{{ $message }}</p> @enderror
-                            <p class="mt-1 text-xs text-slate-500">El IVA del pedido se aplica sobre el subtotal; aquí se congela el precio del ciclo elegido.</p>
+                            <p class="mt-1 text-xs text-slate-500">Se congela el precio y el IVA del ciclo elegido.</p>
                         </div>
                     @endif
                 @else

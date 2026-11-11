@@ -33,27 +33,82 @@ class ProductCatalogTest extends TestCase
 
     public function test_admin_can_create_a_product_with_type_and_category(): void
     {
-        $category = ProductCategory::create(['title' => 'Hosting']);
+        $category = ProductCategory::create(['title' => 'Licencias']);
 
         Livewire::actingAs($this->admin())
             ->test(ProductIndex::class)
             ->call('openProductModal')
-            ->set('productType', ProductType::Hosting->value)
+            ->set('productType', ProductType::License->value)
             ->set('productCategoryId', $category->id)
-            ->set('productName', 'Hosting_idea')
+            ->set('productName', 'Licencia_idea')
             ->set('billingMode', 'one_time')
             ->set('oneTimePrice', '350')
+            ->set('oneTimeTaxRate', '16')
             ->call('saveProduct')
             ->assertSet('showProductModal', false);
 
         $this->assertDatabaseHas('products', [
-            'name' => 'Hosting_idea',
-            'type' => ProductType::Hosting->value,
+            'name' => 'Licencia_idea',
+            'type' => ProductType::License->value,
             'category_id' => $category->id,
             'is_active' => true,
             'billing_mode' => 'one_time',
             'price_cents' => 35000,
+            'tax_rate' => 16,
         ]);
+    }
+
+    public function test_hosting_products_cannot_be_created_by_hand(): void
+    {
+        Livewire::actingAs($this->admin())
+            ->test(ProductIndex::class)
+            ->call('openProductModal')
+            ->set('productType', ProductType::Hosting->value)
+            ->set('productName', 'Hosting a mano')
+            ->set('billingMode', 'one_time')
+            ->set('oneTimePrice', '100')
+            ->call('saveProduct')
+            ->assertHasErrors('productType');
+
+        $this->assertDatabaseMissing('products', ['name' => 'Hosting a mano']);
+    }
+
+    public function test_admin_can_disable_and_enable_a_product_and_filter_by_status(): void
+    {
+        $product = \App\Domain\Services\Models\Product::create([
+            'name' => 'Producto Alternable', 'type' => 'custom', 'billing_mode' => 'one_time',
+            'price_cents' => 1000, 'currency' => 'MXN', 'is_active' => true,
+        ]);
+
+        $component = Livewire::actingAs($this->admin())
+            ->test(ProductIndex::class)
+            ->call('toggleProduct', $product->id);
+
+        $this->assertFalse($product->fresh()->is_active);
+
+        $component->call('filterStatus', 'inactive')
+            ->assertSee('Producto Alternable')
+            ->call('filterStatus', 'active')
+            ->assertDontSee('Producto Alternable')
+            ->call('toggleProduct', $product->id);
+
+        $this->assertTrue($product->fresh()->is_active);
+    }
+
+    public function test_disabling_a_plan_product_also_disables_the_plan(): void
+    {
+        $plan = app(\App\Domain\Services\Services\PlanService::class)->create(
+            ['name' => 'Hosting Espejo', 'type' => 'hosting', 'is_active' => true],
+            ['monthly' => ['unit_price' => '100', 'tax_rate' => '16']],
+        );
+        $product = \App\Domain\Services\Models\Product::where('plan_id', $plan->id)->firstOrFail();
+
+        Livewire::actingAs($this->admin())
+            ->test(ProductIndex::class)
+            ->call('toggleProduct', $product->id);
+
+        $this->assertFalse($product->fresh()->is_active);
+        $this->assertFalse($plan->fresh()->is_active);
     }
 
     public function test_product_title_is_required(): void

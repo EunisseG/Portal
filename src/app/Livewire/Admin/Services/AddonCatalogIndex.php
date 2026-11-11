@@ -41,6 +41,9 @@ class AddonCatalogIndex extends Component
     /** Precio para pago único (decimal). */
     public string $oneTimePrice = '';
 
+    /** IVA (%) del pago único. */
+    public string $oneTimeTaxRate = '16';
+
     /** @var array<string, bool> Ciclos habilitados (recurrente). */
     public array $enabled = [];
 
@@ -103,6 +106,7 @@ class AddonCatalogIndex extends Component
         $this->is_active = $item->is_active;
         $this->billingMode = $item->billing_mode?->value ?? 'one_time';
         $this->oneTimePrice = $item->price_cents ? number_format($item->price_cents / 100, 2, '.', '') : '';
+        $this->oneTimeTaxRate = (string) (float) ($item->tax_rate ?? 16);
 
         $this->resetCycleInputs();
         foreach ($item->prices as $price) {
@@ -133,6 +137,8 @@ class AddonCatalogIndex extends Component
 
         // Resuelve los precios según el modo de cobro.
         $oneTimeCents = 0;
+        // Los recurrentes llevan su IVA por ciclo; se deja 16 por omisión.
+        $oneTimeTax = 16.0;
         $cyclePrices = [];
 
         if ($data['billingMode'] === BillingMode::OneTime->value) {
@@ -141,7 +147,13 @@ class AddonCatalogIndex extends Component
 
                 return;
             }
+            if (! is_numeric($this->oneTimeTaxRate) || (float) $this->oneTimeTaxRate < 0 || (float) $this->oneTimeTaxRate > 100) {
+                $this->addError('oneTimeTaxRate', 'Ingresa un IVA válido (0 a 100).');
+
+                return;
+            }
             $oneTimeCents = Money::fromDecimal($this->oneTimePrice)->amountInCents;
+            $oneTimeTax = (float) $this->oneTimeTaxRate;
         } else {
             foreach (BillingCycle::cases() as $cycle) {
                 $c = $cycle->value;
@@ -181,6 +193,7 @@ class AddonCatalogIndex extends Component
             'description' => $data['description'] ?: null,
             'billing_mode' => $data['billingMode'],
             'price_cents' => $oneTimeCents,
+            'tax_rate' => $oneTimeTax,
             'currency' => Money::DEFAULT_CURRENCY,
             'is_active' => $data['is_active'],
         ];
@@ -224,6 +237,7 @@ class AddonCatalogIndex extends Component
     private function resetForm(): void
     {
         $this->reset('editingId', 'name', 'description', 'oneTimePrice');
+        $this->oneTimeTaxRate = '16';
         $this->billingMode = 'one_time';
         $this->is_active = true;
         $this->resetCycleInputs();

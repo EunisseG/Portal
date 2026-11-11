@@ -50,7 +50,7 @@ class ReportIndex extends Component
 
     public function mount(): void
     {
-        Gate::authorize('viewAny', Invoice::class);
+        Gate::authorize('reports.view');
 
         // Rango por defecto: últimos 12 meses (inicio de mes hace 11 meses → hoy).
         if ($this->from === '') {

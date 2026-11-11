@@ -11,7 +11,7 @@
                 </span>
                 <span class="text-xs text-slate-400">{{ $message->created_at?->format('Y-m-d H:i') }}</span>
             </div>
-            <p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $message->body }}</p>
+            <div class="rich-text mt-2 text-sm text-slate-700">{!! $message->bodyHtml() !!}</div>
 
             @if ($message->attachments->isNotEmpty())
                 <div class="mt-3 flex flex-wrap gap-2">

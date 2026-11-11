@@ -137,7 +137,7 @@
             @if ($order->hasDiscount())
                 <tr><td></td><td class="k">Descuento</td><td class="v">-{{ $discount->format() }}</td></tr>
             @endif
-            <tr><td></td><td class="k">{{ $taxRatePercent }}% IVA</td><td class="v">{{ $tax->format() }}</td></tr>
+            <tr><td></td><td class="k">{{ $taxLabel ?? $taxRatePercent.'% IVA' }}</td><td class="v">{{ $tax->format() }}</td></tr>
             <tr><td></td><td class="k strong">Total</td><td class="v strong">{{ $total->format() }}</td></tr>
         </table>
     </div>

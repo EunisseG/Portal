@@ -192,6 +192,8 @@ class ServiceShow extends Component
         Gate::authorize('create', Addon::class);
 
         $billingCycle = null;
+        // IVA del complemento; null = el del pedido (complemento personalizado).
+        $taxRate = null;
 
         // Si viene del catálogo, tomamos nombre y precio del ítem elegido.
         if ($this->addonMode === 'catalog') {
@@ -207,8 +209,7 @@ class ServiceShow extends Component
 
             if ($item->isRecurring()) {
                 // Recurrente: el admin elige el ciclo; se congela el precio
-                // unitario de ese ciclo (SIN IVA; el IVA del pedido lo aplica
-                // el PricingService sobre el subtotal, igual que el resto).
+                // unitario de ese ciclo y su IVA.
                 $this->validate([
                     'addonCycle' => ['required', new Enum(\App\Domain\Services\Enums\BillingCycle::class)],
                 ], [], ['addonCycle' => 'ciclo de facturación']);
@@ -221,10 +222,12 @@ class ServiceShow extends Component
                 }
 
                 $priceCents = (int) $price->unit_price_cents;
+                $taxRate = (float) $price->tax_rate;
                 $billingCycle = $price->billing_cycle;
             } else {
-                // Pago único: precio plano del catálogo (comportamiento actual).
+                // Pago único: precio plano del catálogo con su IVA.
                 $priceCents = (int) $item->price_cents;
+                $taxRate = (float) ($item->tax_rate ?? 16);
             }
         } else {
             $data = $this->validate([
@@ -252,19 +255,41 @@ class ServiceShow extends Component
             'name' => $name,
             'status' => $data['addonStatus'],
             'price_cents' => $priceCents,
+            'tax_rate' => $taxRate,
             'billing_cycle' => $billingCycle?->value,
             'currency' => Money::DEFAULT_CURRENCY,
             'expires_at' => $expiresAt,
         ]);
 
-        // El complemento afecta el total del pedido: recalcular.
+        // El complemento afecta el total del pedido: recalcular y generar su
+        // orden de pago (el cliente lo verá en sus servicios al pagarla).
         $pricing->recalculate($this->service->refresh()->load('addons'));
+        $order = $this->syncAddonCharges();
 
         $this->reset(['addonCatalogId', 'addonName', 'addonPrice', 'addonCycle', 'addonExpiresAt', 'showAddonForm']);
         $this->addonStatus = 'active';
         $this->addonMode = 'catalog';
         $this->service->refresh()->load(['addons', 'promotion']);
-        session()->flash('status', 'Complemento agregado.');
+        session()->flash('status', $order
+            ? 'Complemento agregado. Orden de pago '.$order->folio.' generada; el cliente lo verá al pagarla.'
+            : 'Complemento agregado.');
+    }
+
+    /**
+     * Genera (o regenera) la orden de pago por los complementos. Un fallo de la
+     * pasarela no debe impedir el cambio: se avisa pero no se interrumpe.
+     */
+    private function syncAddonCharges(): ?\App\Domain\Billing\Models\PaymentOrder
+    {
+        try {
+            return app(\App\Domain\Billing\Services\PaymentOrderService::class)
+                ->syncAddonCharges($this->service, app(\App\Integrations\Contracts\PaymentGateway::class));
+        } catch (\Throwable $e) {
+            report($e);
+            session()->flash('error', 'No se pudo generar la orden de pago del complemento: '.$e->getMessage());
+
+            return null;
+        }
     }
 
     public function deleteAddon(int $addonId, AddonService $addons, PricingService $pricing): void
@@ -272,9 +297,14 @@ class ServiceShow extends Component
         Gate::authorize('delete', Addon::class);
 
         $addon = Addon::where('service_id', $this->service->id)->findOrFail($addonId);
+        $wasPaid = $addon->isPaid();
         $addons->delete($addon);
 
         $pricing->recalculate($this->service->refresh()->load('addons'));
+        // Si aún no se pagaba, la orden pendiente se rehace sin él.
+        if (! $wasPaid) {
+            $this->syncAddonCharges();
+        }
         $this->service->refresh()->load(['addons', 'promotion']);
         session()->flash('status', 'Complemento eliminado.');
     }

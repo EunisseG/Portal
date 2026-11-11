@@ -22,7 +22,7 @@ class CurrencyIndex extends Component
 
     public function mount(): void
     {
-        Gate::authorize('plans.manage');
+        Gate::authorize('currencies.manage');
     }
 
     /**
@@ -40,7 +40,7 @@ class CurrencyIndex extends Component
 
     public function edit(int $id): void
     {
-        Gate::authorize('plans.manage');
+        Gate::authorize('currencies.manage');
 
         $currency = Currency::findOrFail($id);
         $this->editingId = $currency->id;
@@ -57,7 +57,7 @@ class CurrencyIndex extends Component
 
     public function save(): void
     {
-        Gate::authorize('plans.manage');
+        Gate::authorize('currencies.manage');
 
         $data = $this->validate();
         $data['code'] = strtoupper($data['code']);
@@ -75,7 +75,7 @@ class CurrencyIndex extends Component
 
     public function delete(int $id): void
     {
-        Gate::authorize('plans.manage');
+        Gate::authorize('currencies.manage');
 
         Currency::whereKey($id)->delete();
 

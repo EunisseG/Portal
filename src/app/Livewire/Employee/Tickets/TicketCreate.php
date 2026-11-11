@@ -44,7 +44,7 @@ class TicketCreate extends Component
             'internal_area_id' => ['required', Rule::exists('internal_areas', 'id')->where('is_active', true)],
             'priority' => ['required', new Enum(TicketPriority::class)],
             'criticality' => ['required', new Enum(TicketCriticality::class)],
-            'body' => ['required', 'string', 'max:5000'],
+            'body' => ['required', 'string', new \App\Rules\RichTextBody],
             'attachments' => ['array', 'max:5'],
             'attachments.*' => ['file', 'max:10240'],
         ]);

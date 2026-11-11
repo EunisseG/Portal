@@ -60,7 +60,8 @@ class ProductBillingTest extends TestCase
             ->test(ProductIndex::class)
             ->call('openProductModal')
             ->set('productName', 'Hosting Mensual/Anual')
-            ->set('productType', 'hosting')
+            // Hosting solo nace de un plan; un recurrente manual usa otro tipo.
+            ->set('productType', 'email')
             ->set('billingMode', 'recurring')
             ->set('enabled.monthly', true)
             ->set('unitPrice.monthly', '199')

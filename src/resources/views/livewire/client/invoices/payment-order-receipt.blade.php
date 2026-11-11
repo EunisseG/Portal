@@ -227,7 +227,7 @@
                         @endif
                         <tr>
                             <td></td>
-                            <td class="py-2 px-4 text-right text-slate-500">{{ $taxRatePercent }}% IVA</td>
+                            <td class="py-2 px-4 text-right text-slate-500">{{ $taxLabel ?? $taxRatePercent.'% IVA' }}</td>
                             <td class="py-2 pl-4 text-right text-slate-700">{{ $tax->format() }}</td>
                         </tr>
                         <tr>

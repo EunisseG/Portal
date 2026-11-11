@@ -33,16 +33,68 @@ class PricingService
      */
     public function breakdownFor(Service $service): array
     {
-        $baseCents = (int) ($service->unit_price_cents ?? 0);
-        $addonsCents = $this->addonsCents($service);
+        $serviceRate = (float) ($service->tax_rate ?? 0);
 
-        return $this->compute(
-            baseCents: $baseCents,
-            addonsCents: $addonsCents,
-            taxRate: (float) ($service->tax_rate ?? 0),
-            discountType: $service->discount_type?->value,
-            discountValue: $service->discount_value !== null ? (int) $service->discount_value : null,
+        // Cada concepto lleva su IVA: el servicio el del pedido y cada
+        // complemento el suyo (o el del pedido si no tiene uno propio).
+        $lines = [['cents' => (int) ($service->unit_price_cents ?? 0), 'rate' => $serviceRate]];
+        foreach ($this->activeAddons($service) as $addon) {
+            $lines[] = ['cents' => (int) $addon->price_cents, 'rate' => $addon->effectiveTaxRate($serviceRate)];
+        }
+
+        return $this->computeLines(
+            $lines,
+            $service->discount_type?->value,
+            $service->discount_value !== null ? (int) $service->discount_value : null,
         );
+    }
+
+    /**
+     * Cálculo con IVA por concepto. El descuento se reparte entre los
+     * conceptos en proporción a su importe y el IVA se calcula por tasa sobre
+     * la base ya descontada. Con una sola tasa da exactamente el mismo
+     * resultado que compute().
+     *
+     * @param  list<array{cents:int, rate:float}>  $lines
+     * @return array{subtotal_cents:int, discount_cents:int, tax_cents:int, total_cents:int}
+     */
+    public function computeLines(array $lines, ?string $discountType = null, ?int $discountValue = null): array
+    {
+        $lines = array_values(array_map(
+            fn ($l) => ['cents' => max(0, (int) $l['cents']), 'rate' => (float) $l['rate']],
+            $lines,
+        ));
+
+        $subtotal = array_sum(array_column($lines, 'cents'));
+        $discount = $this->discountCents($subtotal, $discountType, $discountValue);
+
+        // Base gravable por tasa (en centavos enteros, sin perder ninguno).
+        $baseByRate = [];
+        $allocated = 0;
+        $last = count($lines) - 1;
+        foreach ($lines as $i => $line) {
+            $share = $subtotal > 0
+                ? ($i === $last ? $discount - $allocated : intdiv($discount * $line['cents'], $subtotal))
+                : 0;
+            $allocated += $share;
+
+            $key = (string) $line['rate'];
+            $baseByRate[$key] = ($baseByRate[$key] ?? 0) + ($line['cents'] - $share);
+        }
+
+        $tax = 0;
+        foreach ($baseByRate as $rate => $base) {
+            $tax += (int) round(max(0, $base) * (float) $rate / 100);
+        }
+
+        $taxBase = max(0, $subtotal - $discount);
+
+        return [
+            'subtotal_cents' => $subtotal,
+            'discount_cents' => $discount,
+            'tax_cents' => $tax,
+            'total_cents' => $taxBase + $tax,
+        ];
     }
 
     /**
@@ -131,18 +183,14 @@ class PricingService
         ];
     }
 
-    /** Suma de los complementos que cuentan para el precio (no cancelados). */
-    private function addonsCents(Service $service): int
+    /**
+     * Complementos que cuentan para el precio. Solo los ACTIVOS: los cancelados
+     * y los suspendidos (p. ej. recurrentes vencidos) no se cobran.
+     */
+    private function activeAddons(Service $service): \Illuminate\Support\Collection
     {
-        $addons = $service->relationLoaded('addons')
-            ? $service->addons
-            : $service->addons()->get();
-
-        // Solo cuentan los complementos ACTIVOS: los cancelados y los
-        // suspendidos (p. ej. recurrentes vencidos) no se cobran.
-        return (int) $addons
-            ->filter(fn ($addon) => $addon->status === AddonStatus::Active)
-            ->sum('price_cents');
+        // Activos y sin los de pago único ya pagados (no se cobran dos veces).
+        return $service->billableAddons();
     }
 
     /**

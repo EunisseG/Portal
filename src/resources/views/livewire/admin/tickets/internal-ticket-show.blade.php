@@ -20,7 +20,7 @@
                         </span>
                         <span class="text-xs text-slate-400">{{ $message->created_at?->diffForHumans() }}</span>
                     </div>
-                    <div class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $message->body }}</div>
+                    <div class="rich-text mt-2 text-sm text-slate-700">{!! $message->bodyHtml() !!}</div>
                     @if ($message->attachments->isNotEmpty())
                         <div class="mt-3 flex flex-wrap gap-2">
                             @foreach ($message->attachments as $attachment)
@@ -34,7 +34,7 @@
             @can('reply', $ticket)
                 <form wire:submit="reply" class="space-y-4 rounded-xl bg-white p-5 shadow-sm ring-1 ring-slate-900/5">
                     <h2 class="text-sm font-semibold text-slate-900">Responder</h2>
-                    <textarea wire:model="body" rows="4" class="block w-full rounded-md border-slate-300 shadow-sm focus:border-slate-500 focus:ring-slate-500"></textarea>
+                    <x-rich-editor model="body" label="Respuesta" placeholder="Escribe tu respuesta..." />
                     @error('body') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror
                     <input type="file" wire:model="attachments" multiple class="block w-full text-sm text-slate-600">
                     @error('attachments.*') <p class="mt-1 text-sm text-red-600">{{ $message }}</p> @enderror

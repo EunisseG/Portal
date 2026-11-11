@@ -43,6 +43,10 @@ final class PermissionLabels
         'audit' => 'Auditoría',
         'security' => 'Seguridad',
         'integrations' => 'Integraciones',
+        'reports' => 'Gráficas',
+        'currencies' => 'Tipos de moneda',
+        'surveys' => 'Encuestas',
+        'settings' => 'Configuración del sistema',
         'client' => 'Portal del cliente',
     ];
 
@@ -92,6 +96,10 @@ final class PermissionLabels
         'security.view' => 'Ver seguridad',
         'security.manage' => 'Gestionar seguridad / dependencias',
         'integrations.manage' => 'Gestionar integraciones',
+        'reports.view' => 'Ver gráficas y exportar reportes',
+        'currencies.manage' => 'Gestionar tipos de moneda',
+        'surveys.manage' => 'Gestionar encuestas',
+        'settings.manage' => 'Gestionar apariencia, plantillas de correo, modo de operación y SMTP',
         'client.invoices.view' => 'Portal: ver facturas',
         'client.proofs.upload' => 'Portal: subir comprobantes',
         'client.tickets.view' => 'Portal: ver tickets',

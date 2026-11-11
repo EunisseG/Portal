@@ -31,9 +31,11 @@ class Addon extends Model
         'name',
         'status',
         'price_cents',
+        'tax_rate',
         'billing_cycle',
         'currency',
         'expires_at',
+        'paid_at',
         'notes',
     ];
 
@@ -46,9 +48,28 @@ class Addon extends Model
             'is_domain' => 'boolean',
             'status' => AddonStatus::class,
             'price_cents' => 'integer',
+            // IVA congelado al agregarlo; null = se usa el IVA del pedido.
+            'tax_rate' => 'decimal:2',
             'billing_cycle' => BillingCycle::class,
             'expires_at' => 'date',
+            'paid_at' => 'datetime',
         ];
+    }
+
+    /** IVA (%) del complemento: el suyo o, si no tiene, el del pedido. */
+    public function effectiveTaxRate(?float $serviceRate = null): float
+    {
+        if ($this->tax_rate !== null) {
+            return (float) $this->tax_rate;
+        }
+
+        return (float) ($serviceRate ?? $this->service?->tax_rate ?? 0);
+    }
+
+    /** ¿Ya se pagó? Solo los pagados se muestran al cliente. */
+    public function isPaid(): bool
+    {
+        return $this->paid_at !== null;
     }
 
     public function service(): BelongsTo
